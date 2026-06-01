@@ -1355,6 +1355,7 @@ function generateSiswa() {
 }
 
 let currentUser = null;
+let dbReady = false;
 
 // ══════════════════════════════════════════════════════
 // FIREBASE REALTIME DATABASE
@@ -1386,8 +1387,8 @@ function fbRemove(path) {
 // ── HELPERS: konversi object Firebase ke array ──
 function toArray(val) {
   if(!val) return [];
-  if(Array.isArray(val)) return val;
-  return Object.values(val);
+  if(Array.isArray(val)) return val.filter(x => x !== null && x !== undefined);
+  return Object.values(val).filter(x => x !== null && x !== undefined);
 }
 
 // saveDB dipanggil untuk data non-nilai (users, mapel, siswa, pengaturan)
@@ -1504,6 +1505,7 @@ function initFirebaseData() {
       DB.logoSekolah = data.pengaturan.logoSekolah || null;
       DB.us4MapelIds = data.pengaturan.us4MapelIds || [3,4,5,6];
     }
+    dbReady = true;
     hideLoadingScreen();
     applyLoginBg();
     applyLogo();
@@ -1573,6 +1575,10 @@ function updateDropdownSiswa() {
 }
 
 function doLoginSiswa() {
+  if(!dbReady) {
+    showToast('Mohon tunggu, database sedang dimuat...', 'error');
+    return;
+  }
   const siswaId = parseInt(document.getElementById('loginNamaSiswa').value);
   if(!siswaId) {
     document.getElementById('loginErrorSiswa').style.display = 'block';
@@ -1586,9 +1592,13 @@ function doLoginSiswa() {
 }
 
 function doLogin() {
+  if(!dbReady) {
+    showToast('Mohon tunggu, database sedang dimuat...', 'error');
+    return;
+  }
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
-  const user = DB.users.find(x => x.username===u && x.password===p);
+  const user = DB.users.find(x => x && x.username===u && x.password===p);
   if(!user) {
     document.getElementById('loginError').style.display = 'block';
     return;
@@ -1644,7 +1654,14 @@ function masukAppSebagai(user) {
 }
 
 document.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') doLogin();
+  if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') {
+    const formSiswa = document.getElementById('formSiswa');
+    if(formSiswa && formSiswa.style.display !== 'none') {
+      doLoginSiswa();
+    } else {
+      doLogin();
+    }
+  }
 });
 
 function doLogout() {
@@ -2692,7 +2709,6 @@ function buatSKLHtml(s, nomorSkl) {
         *Susunan Kurikulum 13
       </div>
     </div>`;
-}
 }
 
 function printKelulusan(siswaId) {
