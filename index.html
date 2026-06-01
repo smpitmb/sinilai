@@ -2543,8 +2543,7 @@ function formatTglLahir(tgl) {
 }
 
 function buatSKLHtml(s, nomorSkl) {
-  const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  const tglCetak = `02 Juni 2026`;
+  const tglCetak = `2 Juni 2026`;
   const nomorFinal = nomorSkl || '421.3/____/SKL/SMP-ITMB/VI/2026';
 
   // Hitung nilai per mapel
@@ -2561,14 +2560,14 @@ function buatSKLHtml(s, nomorSkl) {
 
   const rows = nilaiMapel.map((m,i) => `
     <tr>
-      <td style="text-align:center;border:1px solid #000;padding:3px 6px">${i+1}.</td>
+      <td style="text-align:center;border:1px solid #000;padding:3px 6px">${i+1}</td>
       <td style="border:1px solid #000;padding:3px 8px">${m.nama}</td>
       <td style="text-align:center;border:1px solid #000;padding:3px 6px;font-weight:600">${m.nilai !== null ? m.nilai.toFixed(2) : ''}</td>
     </tr>`).join('');
 
   const kopHtml = DB.kopSekolah
     ? `<img src="${DB.kopSekolah}" style="width:100%;max-height:120px;object-fit:contain;display:block" />`
-    : `<div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:4px">
+    : `<div style="display:flex;align-items:center;gap:16px;padding-bottom:8px;margin-bottom:4px">
         <div style="width:80px;height:80px;border:2px solid #000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;text-align:center;line-height:1.2">LOGO<br>SEKOLAH</div>
         <div style="flex:1;text-align:center">
           <div style="font-size:13px;font-weight:600">YAYASAN PONDOK PESANTREN MAJMA'UL BAHROIN</div>
@@ -2581,71 +2580,87 @@ function buatSKLHtml(s, nomorSkl) {
 
   return `
     <div class="skl-page" style="width:210mm;min-height:297mm;padding:20mm 20mm 15mm 25mm;box-sizing:border-box;font-family:'Times New Roman',serif;font-size:12pt;color:#000;background:white;position:relative">
+
       <!-- KOP -->
       ${kopHtml}
       <div style="border-top:3px solid #000;border-bottom:1px solid #000;margin:4px 0 16px"></div>
 
       <!-- JUDUL -->
-      <div style="text-align:center;margin-bottom:16px">
-        <div style="font-size:16pt;font-weight:700;text-decoration:underline;letter-spacing:2px">SURAT KETERANGAN LULUS</div>
-        <div style="font-size:11pt;margin-top:4px">Nomor : ${nomorFinal}</div>
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:14pt;font-weight:700;text-decoration:underline;letter-spacing:1px">SURAT KETERANGAN KELULUSAN</div>
+        <div style="font-size:11pt;margin-top:6px">Nomor : ${nomorFinal}</div>
       </div>
 
       <!-- PARAGRAF PEMBUKA -->
-      <div style="text-align:justify;margin-bottom:16px;line-height:1.8">
-        Yang bertanda tangan di bawah ini Kepala SMP-IT Majma'ul Bahrain Nomor Pokok Sekolah Nasional 20231079 Kabupaten Bogor Provinsi Jawa Barat, menerangkan bahwa:
+      <div style="text-align:justify;margin-bottom:16px;line-height:2;text-indent:48px">
+        Berdasarkan Surat Keputusan Kepala Sekolah Nomor............... tanggal 2 Juni 2026 tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran 2025/2026, menerangkan bahwa:
       </div>
 
       <!-- DATA SISWA -->
-      <table style="margin-left:24px;margin-bottom:16px;line-height:2;border:none;border-collapse:collapse">
-        <tr><td style="width:180px;padding:0">N a m a</td><td style="padding:0;width:12px">:</td><td style="padding:0"><strong>${s.nama}</strong></td></tr>
-        <tr><td style="padding:0">Tempat, Tgl. Lahir</td><td style="padding:0">:</td><td style="padding:0">${s.tempatLahir||'...............'}, ${formatTglLahir(s.tglLahir)}</td></tr>
-        <tr><td style="padding:0">Nama Orang Tua/Wali</td><td style="padding:0">:</td><td style="padding:0">${s.orangTua||'...............'}</td></tr>
-        <tr><td style="padding:0">Nomor Induk Siswa</td><td style="padding:0">:</td><td style="padding:0">${s.nis||'...............'}</td></tr>
-        <tr><td style="padding:0">NISN</td><td style="padding:0">:</td><td style="padding:0">${s.nis||'...............'}</td></tr>
+      <table style="margin-left:48px;margin-bottom:16px;line-height:2;border:none;border-collapse:collapse">
+        <tr>
+          <td style="width:220px;padding:0">Nama Lengkap</td>
+          <td style="padding:0;width:16px">:</td>
+          <td style="padding:0"><strong>${s.nama}</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:0">Tempat, Tanggal Lahir</td>
+          <td style="padding:0">:</td>
+          <td style="padding:0">${s.tempatLahir||''}, ${formatTglLahir(s.tglLahir)}</td>
+        </tr>
+        <tr>
+          <td style="padding:0">Nomor Induk Siswa Nasional</td>
+          <td style="padding:0">:</td>
+          <td style="padding:0">${s.nisn||s.nis||''}</td>
+        </tr>
       </table>
 
-      <!-- LULUS -->
-      <div style="text-align:center;margin:20px 0 16px">
-        <div style="font-size:22pt;font-weight:900;text-decoration:underline;letter-spacing:6px">L U L U S</div>
-      </div>
+      <!-- DINYATAKAN LULUS -->
+      <table style="margin-left:48px;margin-bottom:16px;line-height:2;border:none;border-collapse:collapse">
+        <tr>
+          <td style="width:100px;padding:0">Dinyatakan</td>
+          <td style="padding:0;width:16px">:</td>
+          <td style="padding:0"><strong>LULUS</strong></td>
+        </tr>
+      </table>
 
-      <div style="margin-bottom:12px;line-height:1.8">
-        Dari Sekolah Menengah Pertama pada tanggal 02 Juni 2026 dengan nilai sebagai berikut :
+      <!-- KALIMAT NILAI -->
+      <div style="margin-bottom:12px;line-height:2;text-indent:48px">
+        Dengan rincian nilai sebagai berikut
       </div>
 
       <!-- TABEL NILAI -->
       <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11pt">
         <thead>
           <tr>
-            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:48px">No.</th>
-            <th style="border:1px solid #000;padding:4px 8px;text-align:center">Mata Pelajaran</th>
-            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:80px">Nilai</th>
+            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:48px"><strong>No.</strong></th>
+            <th style="border:1px solid #000;padding:4px 8px;text-align:center"><strong>Mata Pelajaran</strong></th>
+            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:80px"><strong>Nilai</strong></th>
           </tr>
-          <tr><td colspan="3" style="border:1px solid #000;padding:2px 8px;font-weight:600">Kelompok A</td></tr>
         </thead>
         <tbody>
           ${rows}
           <tr>
-            <td colspan="2" style="border:1px solid #000;padding:3px 8px;text-align:center;font-weight:700">Rata-Rata</td>
+            <td colspan="2" style="border:1px solid #000;padding:3px 8px;text-align:center;font-weight:700">Rata - rata</td>
             <td style="border:1px solid #000;padding:3px 6px;text-align:center;font-weight:700">${rataRata}</td>
           </tr>
         </tbody>
       </table>
 
       <!-- PENUTUP -->
-      <div style="margin-bottom:24px;line-height:1.8">
-        Demikian surat keterangan ini dibuat, untuk dapat dipergunakan sebagaimana mestinya
+      <div style="margin-bottom:24px;line-height:2;text-align:justify">
+        Demikian surat keterangan ini dibuat, untuk dapat dipergunakan sebagaimana mestinya dan berlaku sampai diterbitkannya ijazah.
       </div>
 
       <!-- TANDA TANGAN -->
       <div style="display:flex;justify-content:flex-end">
         <div style="text-align:center;min-width:220px">
-          <div>Bogor, ${tglCetak}</div>
-          <div>Kepala Sekolah,</div>
+          <div>Kabupaten Bogor, &nbsp; ${tglCetak}</div>
+          <div>Kepala,</div>
           <div style="height:70px"></div>
           <div style="font-weight:700;text-decoration:underline">Hj. Miya Fahmiyawati, S.Pd.I</div>
-          <div style="font-size:10pt">NUKS : 19023L072020523210788</div>
+          <div style="font-size:10pt">*Susunan Kurikulum 13</div>
+          <div style="font-size:10pt">NIP.</div>
         </div>
       </div>
     </div>`;
