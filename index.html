@@ -1441,6 +1441,9 @@ function startRealtimeListeners() {
         const updated = DB.users.find(u => u.id === currentUser.id);
         if(updated) currentUser = updated;
       }
+      // Auto refresh halaman guru jika sedang terbuka
+      const activeNav = document.querySelector('.nav-item.active');
+      if(activeNav && activeNav.id === 'nav-guru') renderGuru();
     }
   });
 
