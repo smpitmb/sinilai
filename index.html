@@ -1355,7 +1355,6 @@ function generateSiswa() {
 }
 
 let currentUser = null;
-let dbReady = false;
 
 // ══════════════════════════════════════════════════════
 // FIREBASE REALTIME DATABASE
@@ -1387,8 +1386,8 @@ function fbRemove(path) {
 // ── HELPERS: konversi object Firebase ke array ──
 function toArray(val) {
   if(!val) return [];
-  if(Array.isArray(val)) return val.filter(x => x !== null && x !== undefined);
-  return Object.values(val).filter(x => x !== null && x !== undefined);
+  if(Array.isArray(val)) return val;
+  return Object.values(val);
 }
 
 // saveDB dipanggil untuk data non-nilai (users, mapel, siswa, pengaturan)
@@ -1477,19 +1476,13 @@ function initFirebaseData() {
   db.ref('/').once('value').then(snap => {
     const existing = snap.val();
     const promises = [];
-    // HANYA isi jika node benar-benar tidak ada (null) — jangan timpa data yang sudah ada
-    if(!existing || existing.users === null || existing.users === undefined)
-      promises.push(fbSet('users', DB.users));
-    if(!existing || existing.mapel === null || existing.mapel === undefined)
-      promises.push(fbSet('mapel', DB.mapel));
-    if(!existing || existing.siswa === null || existing.siswa === undefined)
-      promises.push(fbSet('siswa', DB.siswa));
-    if(!existing || existing.nilai === null || existing.nilai === undefined)
-      promises.push(fbSet('nilai', {}));
-    if(!existing || existing.pengaturan === null || existing.pengaturan === undefined)
-      promises.push(fbSet('pengaturan', {
-        kopSekolah: null, loginBg: null, logoSekolah: null, us4MapelIds: [3,4,5,6]
-      }));
+    if(!existing || !existing.users)  promises.push(fbSet('users', DB.users));
+    if(!existing || !existing.mapel)  promises.push(fbSet('mapel', DB.mapel));
+    if(!existing || !existing.siswa)  promises.push(fbSet('siswa', DB.siswa));
+    if(!existing || !existing.nilai)  promises.push(fbSet('nilai', {}));
+    if(!existing || !existing.pengaturan) promises.push(fbSet('pengaturan', {
+      kopSekolah: null, loginBg: null, logoSekolah: null, us4MapelIds: [3,4,5,6]
+    }));
     return Promise.all(promises);
   }).then(() => {
     return db.ref('/').once('value');
@@ -1505,7 +1498,6 @@ function initFirebaseData() {
       DB.logoSekolah = data.pengaturan.logoSekolah || null;
       DB.us4MapelIds = data.pengaturan.us4MapelIds || [3,4,5,6];
     }
-    dbReady = true;
     hideLoadingScreen();
     applyLoginBg();
     applyLogo();
@@ -1575,10 +1567,6 @@ function updateDropdownSiswa() {
 }
 
 function doLoginSiswa() {
-  if(!dbReady) {
-    showToast('Mohon tunggu, database sedang dimuat...', 'error');
-    return;
-  }
   const siswaId = parseInt(document.getElementById('loginNamaSiswa').value);
   if(!siswaId) {
     document.getElementById('loginErrorSiswa').style.display = 'block';
@@ -1592,13 +1580,9 @@ function doLoginSiswa() {
 }
 
 function doLogin() {
-  if(!dbReady) {
-    showToast('Mohon tunggu, database sedang dimuat...', 'error');
-    return;
-  }
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
-  const user = DB.users.find(x => x && x.username===u && x.password===p);
+  const user = DB.users.find(x => x.username===u && x.password===p);
   if(!user) {
     document.getElementById('loginError').style.display = 'block';
     return;
@@ -1654,14 +1638,7 @@ function masukAppSebagai(user) {
 }
 
 document.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') {
-    const formSiswa = document.getElementById('formSiswa');
-    if(formSiswa && formSiswa.style.display !== 'none') {
-      doLoginSiswa();
-    } else {
-      doLogin();
-    }
-  }
+  if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') doLogin();
 });
 
 function doLogout() {
@@ -2566,147 +2543,110 @@ function formatTglLahir(tgl) {
 }
 
 function buatSKLHtml(s, nomorSkl) {
-  const tglCetak = `2 Juni 2026`;
-  const nomorFinal = nomorSkl || '......................................';
+  const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const tglCetak = `02 Juni 2026`;
+  const nomorFinal = nomorSkl || '421.3/____/SKL/SMP-ITMB/VI/2026';
 
-  // Daftar mapel fixed sesuai format SKK
-  const mapelFixed = [
-    'Pendidikan Agama dan Budi Pekerti',
-    'Pendidikan Pancasila dan Kewarganegaraan',
-    'Bahasa Indonesia',
-    'Matematika',
-    'Ilmu Pengetahuan Alam',
-    'Ilmu Pengetahuan Sosial',
-    'Bahasa Inggris',
-    'Seni Budaya',
-    'Pendidikan Jasmani Olahraga dan Kesehatan',
-    'Prakarya dan/ atau Informatika *',
-    'Muatan Lokal Bahasa Sunda',
-    'Muatan Lokal Baca Tulis Al-Qur\'an',
-  ];
-
-  // Cocokkan nama mapel fixed dengan DB.mapel untuk ambil nilai
-  const nilaiRows = mapelFixed.map((namaFixed, i) => {
-    const mapelDB = DB.mapel.find(m =>
-      m.nama.toLowerCase().includes(namaFixed.split(' ')[0].toLowerCase()) ||
-      namaFixed.toLowerCase().includes(m.nama.toLowerCase().split(' ')[0])
-    );
-    let nilaiStr = '';
-    if(mapelDB) {
-      const n = getNilaiSiswa(s.id, mapelDB.id);
-      const h = hitungNilai(n, mapelDB.id);
-      const hasData = [n.s1,n.s2,n.s3,n.s4,n.s5,n.us,n.us4,n.praktik].some(v => v!==''&&v!==null&&v!==undefined);
-      nilaiStr = hasData ? parseFloat(h.akhir).toFixed(2) : '';
-    }
-    return { no: i+1, nama: namaFixed, nilai: nilaiStr };
+  // Hitung nilai per mapel
+  const nilaiMapel = DB.mapel.map((m,i) => {
+    const n = getNilaiSiswa(s.id, m.id);
+    const h = hitungNilai(n, m.id);
+    const hasData = [n.s1,n.s2,n.s3,n.s4,n.s5,n.us,n.us4,n.praktik].some(v => v!==''&&v!==null&&v!==undefined);
+    return { nama: m.nama, nilai: hasData ? parseFloat(h.akhir) : null };
   });
 
-  // Rata-rata
-  const validNilai = nilaiRows.filter(r => r.nilai !== '').map(r => parseFloat(r.nilai));
-  const rataRata = validNilai.length ? (validNilai.reduce((a,b)=>a+b,0)/validNilai.length).toFixed(2) : '';
+  // Hitung rata-rata
+  const validNilai = nilaiMapel.filter(x => x.nilai !== null);
+  const rataRata = validNilai.length ? (validNilai.reduce((a,b) => a+b.nilai,0)/validNilai.length).toFixed(2) : '—';
 
-  const rows = nilaiRows.map(r => `
+  const rows = nilaiMapel.map((m,i) => `
     <tr>
-      <td style="text-align:center;border:1px solid #000;padding:3px 6px">${r.no}</td>
-      <td style="border:1px solid #000;padding:3px 8px">${r.nama}</td>
-      <td style="text-align:center;border:1px solid #000;padding:3px 6px;font-weight:600">${r.nilai}</td>
+      <td style="text-align:center;border:1px solid #000;padding:3px 6px">${i+1}.</td>
+      <td style="border:1px solid #000;padding:3px 8px">${m.nama}</td>
+      <td style="text-align:center;border:1px solid #000;padding:3px 6px;font-weight:600">${m.nilai !== null ? m.nilai.toFixed(2) : ''}</td>
     </tr>`).join('');
 
   const kopHtml = DB.kopSekolah
-    ? `<img src="${DB.kopSekolah}" style="width:100%;max-height:130px;object-fit:contain;display:block" /><div style="border-top:3px solid #000;border-bottom:1px solid #000;margin:4px 0 16px"></div>`
-    : `<div style="display:flex;align-items:center;gap:16px;padding-bottom:8px;margin-bottom:4px">
-        <div style="width:80px;height:80px;border:2px solid #000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;text-align:center;line-height:1.3">KOP<br>SEKOLAH</div>
+    ? `<img src="${DB.kopSekolah}" style="width:100%;max-height:120px;object-fit:contain;display:block" />`
+    : `<div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #000;padding-bottom:8px;margin-bottom:4px">
+        <div style="width:80px;height:80px;border:2px solid #000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;text-align:center;line-height:1.2">LOGO<br>SEKOLAH</div>
         <div style="flex:1;text-align:center">
-          <div style="font-size:12px;font-weight:600">YAYASAN PONDOK PESANTREN MAJMA'UL BAHROIN</div>
-          <div style="font-size:18px;font-weight:900">SMP IT MAJMA'UL BAHRAIN</div>
-          <div style="font-size:10px">TAPOS II TENJOLAYA BOGOR</div>
-          <div style="font-size:10px">NO IZIN OPERASIONAL : 421.3/388/KPTS/HUK/2004</div>
-          <div style="font-size:10px">Alamat : Jl. Abdul Fatah Desa Tapos II Rt. 02/03 Kec. Tenjolaya Bogor</div>
+          <div style="font-size:13px;font-weight:600">YAYASAN PONDOK PESANTREN MAJMA'UL BAHROIN</div>
+          <div style="font-size:20px;font-weight:900;letter-spacing:1px">SMP IT MAJMA'UL BAHRAIN</div>
+          <div style="font-size:11px">TAPOS II TENJOLAYA BOGOR</div>
+          <div style="font-size:11px">NO IZIN OPERASIONAL : 421.3/388/KPTS/HUK/2004</div>
+          <div style="font-size:11px">Alamat : Jl. Abdul Fatah Desa Tapos II Rt. 02/03 Kec. Tenjolaya Bogor</div>
         </div>
-      </div>
-      <div style="border-top:3px solid #000;border-bottom:1px solid #000;margin:4px 0 16px"></div>`;
+      </div>`;
 
   return `
-    <div class="skl-page" style="width:210mm;min-height:297mm;padding:15mm 20mm 15mm 25mm;box-sizing:border-box;font-family:'Times New Roman',serif;font-size:12pt;color:#000;background:white">
-
+    <div class="skl-page" style="width:210mm;min-height:297mm;padding:20mm 20mm 15mm 25mm;box-sizing:border-box;font-family:'Times New Roman',serif;font-size:12pt;color:#000;background:white;position:relative">
+      <!-- KOP -->
       ${kopHtml}
+      <div style="border-top:3px solid #000;border-bottom:1px solid #000;margin:4px 0 16px"></div>
 
       <!-- JUDUL -->
       <div style="text-align:center;margin-bottom:16px">
-        <div style="font-size:14pt;font-weight:700;text-decoration:underline">SURAT KETERANGAN KELULUSAN</div>
-        <div style="font-size:11pt;margin-top:6px">Nomor : ${nomorFinal}</div>
+        <div style="font-size:16pt;font-weight:700;text-decoration:underline;letter-spacing:2px">SURAT KETERANGAN LULUS</div>
+        <div style="font-size:11pt;margin-top:4px">Nomor : ${nomorFinal}</div>
       </div>
 
       <!-- PARAGRAF PEMBUKA -->
-      <div style="text-align:justify;margin-bottom:16px;line-height:2;text-indent:48px">
-        Berdasarkan Surat Keputusan Kepala Sekolah Nomor............... tanggal 2 Juni 2026 tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran 2025/2026, menerangkan bahwa:
+      <div style="text-align:justify;margin-bottom:16px;line-height:1.8">
+        Yang bertanda tangan di bawah ini Kepala SMP-IT Majma'ul Bahrain Nomor Pokok Sekolah Nasional 20231079 Kabupaten Bogor Provinsi Jawa Barat, menerangkan bahwa:
       </div>
 
       <!-- DATA SISWA -->
-      <table style="margin-left:48px;margin-bottom:16px;line-height:2;border:none;border-collapse:collapse">
-        <tr>
-          <td style="width:220px;padding:0">Nama Lengkap</td>
-          <td style="padding:0;width:16px">:</td>
-          <td style="padding:0"><strong>${s.nama}</strong></td>
-        </tr>
-        <tr>
-          <td style="padding:0">Tempat, Tanggal Lahir</td>
-          <td style="padding:0">:</td>
-          <td style="padding:0">${s.tempatLahir||'...............'}, ${formatTglLahir(s.tglLahir)}</td>
-        </tr>
-        <tr>
-          <td style="padding:0">Nomor Induk Siswa Nasional</td>
-          <td style="padding:0">:</td>
-          <td style="padding:0">${s.nis||'...............'}</td>
-        </tr>
+      <table style="margin-left:24px;margin-bottom:16px;line-height:2;border:none;border-collapse:collapse">
+        <tr><td style="width:180px;padding:0">N a m a</td><td style="padding:0;width:12px">:</td><td style="padding:0"><strong>${s.nama}</strong></td></tr>
+        <tr><td style="padding:0">Tempat, Tgl. Lahir</td><td style="padding:0">:</td><td style="padding:0">${s.tempatLahir||'...............'}, ${formatTglLahir(s.tglLahir)}</td></tr>
+        <tr><td style="padding:0">Nama Orang Tua/Wali</td><td style="padding:0">:</td><td style="padding:0">${s.orangTua||'...............'}</td></tr>
+        <tr><td style="padding:0">Nomor Induk Siswa</td><td style="padding:0">:</td><td style="padding:0">${s.nis||'...............'}</td></tr>
+        <tr><td style="padding:0">NISN</td><td style="padding:0">:</td><td style="padding:0">${s.nis||'...............'}</td></tr>
       </table>
 
-      <!-- DINYATAKAN LULUS -->
-      <div style="margin-bottom:12px;line-height:2;margin-left:48px">
-        Dinyatakan &nbsp;&nbsp;: &nbsp;&nbsp;<strong>LULUS</strong>
+      <!-- LULUS -->
+      <div style="text-align:center;margin:20px 0 16px">
+        <div style="font-size:22pt;font-weight:900;text-decoration:underline;letter-spacing:6px">L U L U S</div>
       </div>
 
       <div style="margin-bottom:12px;line-height:1.8">
-        Dengan rincian nilai sebagai berikut
+        Dari Sekolah Menengah Pertama pada tanggal 02 Juni 2026 dengan nilai sebagai berikut :
       </div>
 
       <!-- TABEL NILAI -->
       <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11pt">
         <thead>
           <tr>
-            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:40px"><strong>No.</strong></th>
-            <th style="border:1px solid #000;padding:4px 8px;text-align:center"><strong>Mata Pelajaran</strong></th>
-            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:80px"><strong>Nilai</strong></th>
+            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:48px">No.</th>
+            <th style="border:1px solid #000;padding:4px 8px;text-align:center">Mata Pelajaran</th>
+            <th style="border:1px solid #000;padding:4px 6px;text-align:center;width:80px">Nilai</th>
           </tr>
+          <tr><td colspan="3" style="border:1px solid #000;padding:2px 8px;font-weight:600">Kelompok A</td></tr>
         </thead>
         <tbody>
           ${rows}
           <tr>
-            <td colspan="2" style="border:1px solid #000;padding:3px 8px;text-align:center;font-weight:700">Rata - rata</td>
+            <td colspan="2" style="border:1px solid #000;padding:3px 8px;text-align:center;font-weight:700">Rata-Rata</td>
             <td style="border:1px solid #000;padding:3px 6px;text-align:center;font-weight:700">${rataRata}</td>
           </tr>
         </tbody>
       </table>
 
       <!-- PENUTUP -->
-      <div style="margin-bottom:24px;line-height:1.8;text-align:justify">
-        Demikian surat keterangan ini dibuat, untuk dapat dipergunakan sebagaimana mestinya dan berlaku sampai diterbitkannya ijazah.
+      <div style="margin-bottom:24px;line-height:1.8">
+        Demikian surat keterangan ini dibuat, untuk dapat dipergunakan sebagaimana mestinya
       </div>
 
       <!-- TANDA TANGAN -->
       <div style="display:flex;justify-content:flex-end">
         <div style="text-align:center;min-width:220px">
-          <div>Kabupaten Bogor, &nbsp; ${tglCetak}</div>
-          <div>Kepala,</div>
+          <div>Bogor, ${tglCetak}</div>
+          <div>Kepala Sekolah,</div>
           <div style="height:70px"></div>
           <div style="font-weight:700;text-decoration:underline">Hj. Miya Fahmiyawati, S.Pd.I</div>
-          <div style="font-size:10pt">NIP.</div>
+          <div style="font-size:10pt">NUKS : 19023L072020523210788</div>
         </div>
-      </div>
-
-      <!-- CATATAN KAKI -->
-      <div style="margin-top:16px;font-size:9pt;font-style:italic">
-        *Susunan Kurikulum 13
       </div>
     </div>`;
 }
@@ -2716,7 +2656,7 @@ function printKelulusan(siswaId) {
 
   // Generate nomor SKL otomatis berdasarkan urutan siswa
   const idx = DB.siswa.findIndex(x=>x.id===siswaId) + 1;
-  const nomorDefault = `421.3/${String(idx).padStart(4,'0')}/SKK/SMP-ITMB/VI/2026`;
+  const nomorDefault = `421.3/${String(idx).padStart(4,'0')}/SKL/SMP-ITMB/VI/2026`;
 
   showModal(`
     <h3>🖨 SKL — ${s.nama}</h3>
@@ -2763,7 +2703,7 @@ function cetakSKL() {
 function cetakSemuaSKL() {
   if(!confirm(`Cetak SKL untuk semua ${DB.siswa.length} siswa?`)) return;
   const allHtml = DB.siswa.map((s,i) => {
-    const nomor = `421.3/${String(i+1).padStart(4,'0')}/SKK/SMP-ITMB/VI/2026`;
+    const nomor = `421.3/${String(i+1).padStart(4,'0')}/SKL/SMP-ITMB/VI/2026`;
     return buatSKLHtml(s, nomor);
   }).join('');
   const win = window.open('','_blank','width=900,height=1100');
