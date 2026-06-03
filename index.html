@@ -185,7 +185,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .ltbl tr:nth-child(even) td{background:#f9fafb}
 .ltbl .cn{text-align:left;font-weight:600}
 /* SKL */
-@media print{#SB,#HD,#TC,.nopr,#BN{display:none!important}#MN{margin:0!important}#CT{padding:0!important}body{background:#fff}.skldoc{box-shadow:none!important;border-radius:0!important;padding:15mm 20mm 20mm 25mm!important;max-width:none!important}}
+@media print{@page{size:A4 portrait;margin:0}#SB,#HD,#TC,.nopr,#BN{display:none!important}#MN{margin:0!important}#CT{padding:0!important;overflow:visible!important;height:auto!important}body{background:#fff;overflow:visible!important}.skldoc{box-shadow:none!important;border-radius:0!important;padding:12mm 18mm 14mm 22mm!important;max-width:none!important;width:100%!important;page-break-inside:avoid!important;font-size:11pt!important;line-height:1.5!important}.skl-tb{font-size:10pt!important}.skl-pg,.skl-ly,.skl-ri,.skl-pe{font-size:11pt!important}.skl-jd{font-size:13pt!important}.skl-ks{font-size:14pt!important}.skl-ky{font-size:12pt!important}.ttdg{height:54px!important}.skl-tr{margin-top:16px!important}.skl-nm{margin-bottom:12px!important}}
 .skldoc{background:#fff;padding:24px 50px 36px;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.6;box-shadow:var(--shadow-lg);border-radius:var(--radius);max-width:794px;margin:0 auto}
 .skl-kw{margin-bottom:0}.skl-ki{width:100%;display:block}
 .skl-kf{display:flex;align-items:center;gap:16px;padding-bottom:10px}
