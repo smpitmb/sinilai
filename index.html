@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>SiNilai — SMP-IT Majma'ul Bahrain</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --em:#1a6b4a;--em2:#145439;--em3:#0e3d2b;--em-light:#e8f5ef;--em-mid:#b2d9c6;
@@ -449,10 +446,31 @@ h1,h2,h3{font-family:'Playfair Display',serif}
 </div>
 
 <script>
-// ═══ FIREBASE ═══
-const firebaseConfig={apiKey:"AIzaSyBiv-YC0KLaq6ecCc6gSlgGhdbnxulSt6c",databaseURL:"https://sinilai-majmaulbahrain-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"sinilai-majmaulbahrain"};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.database();
+// ══════════════════════════════════════════════════
+// LOADING SCREEN: hilang otomatis setelah 2.5 detik
+// TIDAK bergantung Firebase — dijamin selalu hilang
+// ══════════════════════════════════════════════════
+(function(){
+  function hideNow(){
+    var ls=document.getElementById('loading-screen');
+    var login=document.getElementById('login-screen');
+    if(ls){ls.style.opacity='0';ls.style.transition='opacity 0.4s';setTimeout(function(){ls.style.display='none';},400);}
+    if(login)login.classList.remove('hide');
+  }
+  // Dijamin hilang setelah 2.5 detik apapun yang terjadi
+  setTimeout(hideNow, 2500);
+  window._hideLoading=hideNow;
+})();
+
+// ═══ FIREBASE INIT (aman — tidak crash jika gagal) ═══
+var db=null;
+try{
+  const firebaseConfig={apiKey:"AIzaSyBiv-YC0KLaq6ecCc6gSlgGhdbnxulSt6c",databaseURL:"https://sinilai-majmaulbahrain-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"sinilai-majmaulbahrain"};
+  if(typeof firebase!=='undefined'){
+    firebase.initializeApp(firebaseConfig);
+    db=firebase.database();
+  }
+}catch(e){console.warn('Firebase init error:',e);}
 
 // ═══ STATE ═══
 let currentUser=null,currentRole=null,loginRole='admin';
@@ -461,26 +479,17 @@ let activeMenu=null,debounceTimers={};
 let selectedKelasGuru='IX-1',selectedMapelGuru=null;
 let selectedMapelSiswa=null;
 
+// DB helper aman
+function dbRef(path){if(!db)return null;try{return db.ref(path);}catch(e){return null;}}
+function dbSet(path,val){const r=dbRef(path);if(r)r.set(val);}
+function dbRemove(path){const r=dbRef(path);if(r)r.remove();}
+function dbOn(path,cb){const r=dbRef(path);if(r)r.on('value',cb);}
+function dbOnce(path,cb,errCb){const r=dbRef(path);if(r)r.once('value',cb,errCb||function(){});else cb({val:()=>null});}
+
 // ═══ INIT ═══
 window.onload=()=>{
   updateDate();setInterval(updateDate,60000);
-  // Paksa loading screen hilang maks 5 detik
-  const hideLoading=()=>{
-    const ls=document.getElementById('loading-screen');
-    const login=document.getElementById('login-screen');
-    ls.classList.add('hide');
-    login.classList.remove('hide');
-    setTimeout(()=>ls.classList.add('gone'),500);
-  };
-  const fallback=setTimeout(hideLoading,5000);
-  // Coba load pengaturan, selesai dalam 2.4 detik atau pakai fallback
-  loadPengaturan()
-    .then(()=>applyPengaturan())
-    .catch(()=>{})
-    .finally(()=>{
-      clearTimeout(fallback);
-      setTimeout(hideLoading,400);
-    });
+  loadPengaturan().then(()=>applyPengaturan()).catch(()=>{});
 };
 function updateDate(){
   const el=document.getElementById('header-date');
@@ -488,12 +497,8 @@ function updateDate(){
 }
 async function loadPengaturan(){
   return new Promise(r=>{
-    const t=setTimeout(()=>r(),4000); // fallback 4 detik
-    db.ref('/pengaturan').once('value',s=>{
-      clearTimeout(t);
-      pengaturan=s.val()||{};
-      r();
-    },()=>{clearTimeout(t);r();}); // onError juga resolve
+    const t=setTimeout(()=>r(),3000);
+    dbOnce('/pengaturan',s=>{clearTimeout(t);try{pengaturan=s.val()||{};}catch(e){}r();},()=>{clearTimeout(t);r();});
   });
 }
 function applyPengaturan(){
@@ -518,12 +523,20 @@ function setLoginRole(role){
   document.getElementById('form-siswa').style.display=role==='siswa'?'block':'none';
   document.getElementById('login-error').style.display='none';
 }
+// Helper: dbOnce sebagai Promise untuk await
+function dbOnceProm(path){
+  return new Promise((res,rej)=>{
+    if(!db){res({val:()=>null});return;}
+    try{(dbRef(path)||{once:()=>{}}).once('value',s=>res(s),e=>res({val:()=>null}));}
+    catch(e){res({val:()=>null});}
+  });
+}
 async function loadSiswaDrp(){
   const kelas=document.getElementById('sel-kelas-login').value;
   const sel=document.getElementById('sel-nama-login');
   sel.innerHTML='<option value="">-- Pilih Nama --</option>';
   if(!kelas)return;
-  const snap=await db.ref('/siswa').once('value');
+  const snap=await dbOnceProm('/siswa');
   const val=snap.val()||{};
   const arr=Array.isArray(val)?val.filter(Boolean):Object.values(val).filter(Boolean);
   arr.filter(s=>s&&s.kelas===kelas).sort((a,b)=>a.nama.localeCompare(b.nama)).forEach(s=>{
@@ -538,7 +551,7 @@ async function doLogin(){
     const kelas=document.getElementById('sel-kelas-login').value;
     const sid=document.getElementById('sel-nama-login').value;
     if(!kelas||!sid){showErr('Pilih kelas dan nama siswa');return;}
-    const snap=await db.ref('/siswa').once('value');
+    const snap=await dbOnceProm('/siswa');
     const val=snap.val()||{};
     const arr=Array.isArray(val)?val.filter(Boolean):Object.values(val).filter(Boolean);
     const found=arr.find(s=>s&&s.id===sid);
@@ -549,15 +562,16 @@ async function doLogin(){
   const pass=document.getElementById('inp-password').value;
   if(!uname||!pass){showErr('Isi username dan password');return;}
   if(loginRole==='admin'){
+    // Default admin hardcode — tidak perlu Firebase
     if(uname==='admin'&&pass==='admin123'){currentUser={username:'admin',nama:'Administrator',role:'admin'};currentRole='admin';enterApp();return;}
-    const snap=await db.ref('/users').once('value');
+    const snap=await dbOnceProm('/users');
     const val=snap.val()||{};const arr=Array.isArray(val)?val.filter(Boolean):Object.values(val).filter(Boolean);
     const found=arr.find(u=>u&&u.role==='admin'&&u.username===uname&&u.password===pass);
     if(!found){showErr('Username atau password salah');return;}
     currentUser=found;currentRole='admin';enterApp();return;
   }
   if(loginRole==='guru'){
-    const snap=await db.ref('/users').once('value');
+    const snap=await dbOnceProm('/users');
     const val=snap.val()||{};const arr=Array.isArray(val)?val.filter(Boolean):Object.values(val).filter(Boolean);
     const found=arr.find(u=>u&&u.role==='guru'&&u.username===uname&&u.password===pass);
     if(!found){showErr('Username atau password salah');return;}
@@ -572,7 +586,7 @@ function enterApp(){
   loadAllData();
 }
 function doLogout(){
-  ['users','mapel','siswa','nilai'].forEach(r=>db.ref('/'+r).off());
+  ['users','mapel','siswa','nilai'].forEach(r=>(dbRef('/'+r)||{off:()=>{}}).off());
   currentUser=null;currentRole=null;
   document.getElementById('app').classList.remove('show');
   document.getElementById('login-screen').classList.remove('hide');
@@ -583,13 +597,13 @@ function doLogout(){
 
 // ═══ DATA ═══
 function loadAllData(){
-  db.ref('/users').on('value',s=>{const v=s.val()||{};allUsers=Array.isArray(v)?v.filter(Boolean):Object.values(v).filter(Boolean);});
-  db.ref('/mapel').on('value',s=>{const v=s.val()||{};allMapel=Array.isArray(v)?v.filter(Boolean):Object.values(v).filter(Boolean);});
-  db.ref('/siswa').on('value',s=>{
+  dbOn('/users',,s=>{const v=s.val()||{};allUsers=Array.isArray(v)?v.filter(Boolean):Object.values(v).filter(Boolean);});
+  dbOn('/mapel',,s=>{const v=s.val()||{};allMapel=Array.isArray(v)?v.filter(Boolean):Object.values(v).filter(Boolean);});
+  dbOn('/siswa',,s=>{
     const v=s.val()||{};allSiswa=Array.isArray(v)?v.filter(Boolean):Object.values(v).filter(Boolean);
     if(['data-siswa','dashboard','nilai-kelulusan','legger','nilai-guru','nilai-siswa'].includes(activeMenu))navigateTo(activeMenu);
   });
-  db.ref('/nilai').on('value',s=>{
+  dbOn('/nilai',,s=>{
     allNilai=s.val()||{};
     if(['nilai-guru','legger','nilai-kelulusan','nilai-siswa','dashboard'].includes(activeMenu))navigateTo(activeMenu);
   });
@@ -802,7 +816,7 @@ function importSiswaExcel(inp){
           jk:(r[5]||'L').toString().trim()||'L',kelas:(r[6]||'IX-1').toString().trim()||'IX-1',
           namaOrtu:(r[7]||'').toString().trim()};
         count++;
-        return db.ref('/siswa/'+id).set(data);
+        return (dbRef('/siswa/'+id)||{set:()=>{}}).set(data);
       });
       Promise.all(promises).then(()=>{toast(`${count} siswa berhasil diimport ✓`);inp.value='';});
     }catch(err){toast('Gagal membaca file Excel','error');console.error(err);}
@@ -814,7 +828,7 @@ function hapusSemuaSiswa(){
   if(!konfirm1)return;
   const konfirm2=prompt('Ketik "HAPUS SEMUA" (huruf kapital) untuk konfirmasi:');
   if(konfirm2!=='HAPUS SEMUA'){toast('Penghapusan dibatalkan','info');return;}
-  db.ref('/siswa').remove().then(()=>toast(`Semua data siswa berhasil dihapus`,'success'));
+  (dbRef('/siswa')||{remove:()=>{}}).remove().then(()=>toast(`Semua data siswa berhasil dihapus`,'success'));
 }
 function renderSiswaList(){
   const q=(document.getElementById('search-siswa')?.value||'').toLowerCase();
@@ -872,9 +886,9 @@ function saveSiswa(id){
   const data={nis:v('f-nis'),nisn:v('f-nisn'),nama:v('f-nama'),tempatLahir:v('f-ttl'),tanggalLahir:v('f-tgl'),jk:v('f-jk'),kelas:v('f-kelas'),namaOrtu:v('f-ortu')};
   if(!data.nama){toast('Nama wajib diisi','error');return;}
   const key=id||'siswa_'+Date.now();data.id=key;
-  db.ref('/siswa/'+key).set(data).then(()=>{toast(id?'Siswa diperbarui':'Siswa ditambahkan');closeModal();});
+  (dbRef('/siswa/'+key)||{set:()=>{}}).set(data).then(()=>{toast(id?'Siswa diperbarui':'Siswa ditambahkan');closeModal();});
 }
-function hapusSiswa(id){if(!confirm('Hapus siswa ini?'))return;db.ref('/siswa/'+id).remove().then(()=>toast('Siswa dihapus'));}
+function hapusSiswa(id){if(!confirm('Hapus siswa ini?'))return;(dbRef('/siswa/'+id)||{remove:()=>{}}).remove().then(()=>toast('Siswa dihapus'));}
 
 // ═══ MAPEL ═══
 function renderMapel(){
@@ -911,12 +925,12 @@ function saveMapel(id){
   if(!data.nama){toast('Nama mapel wajib diisi','error');return;}
   const guruId=v('f-mapel-guru');
   const key=id||'mapel_'+Date.now();data.id=key;
-  db.ref('/mapel/'+key).set(data).then(()=>{
-    if(guruId){const g=allUsers.find(u=>u.id===guruId);if(g){const ids=g.mapelIds||[];if(!ids.includes(key))ids.push(key);db.ref('/users/'+guruId+'/mapelIds').set(ids);}}
+  (dbRef('/mapel/'+key)||{set:()=>{}}).set(data).then(()=>{
+    if(guruId){const g=allUsers.find(u=>u.id===guruId);if(g){const ids=g.mapelIds||[];if(!ids.includes(key))ids.push(key);(dbRef('/users/'+guruId+'/mapelIds')||{set:()=>{}}).set(ids);}}
     toast(id?'Mapel diperbarui':'Mapel ditambahkan');closeModal();renderMapel();
   });
 }
-function hapusMapel(id){if(!confirm('Hapus mapel ini?'))return;db.ref('/mapel/'+id).remove().then(()=>{toast('Mapel dihapus');renderMapel();});}
+function hapusMapel(id){if(!confirm('Hapus mapel ini?'))return;(dbRef('/mapel/'+id)||{remove:()=>{}}).remove().then(()=>{toast('Mapel dihapus');renderMapel();});}
 
 // ═══ DATA GURU ═══
 function renderDataGuru(){
@@ -1006,7 +1020,7 @@ function importGuruExcel(inp){
         }).filter(Boolean);
         const id='guru_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
         count++;
-        return db.ref('/users/'+id).set({id,nama,username:uname,password:pass,mapelIds,role:'guru'});
+        return (dbRef('/users/'+id)||{set:()=>{}}).set({id,nama,username:uname,password:pass,mapelIds,role:'guru'});
       });
       Promise.all(promises).then(()=>{toast(`${count} guru berhasil diimport ✓`);inp.value='';});
     }catch(err){toast('Gagal membaca file Excel','error');console.error(err);}
@@ -1033,10 +1047,10 @@ function saveGuru(id){
   const data={id:key,nama,username:uname,mapelIds,role:'guru'};
   if(pass)data.password=pass;
   else if(!id){toast('Password wajib untuk guru baru','error');return;}
-  if(id)db.ref('/users/'+id).update(data).then(()=>{toast('Guru diperbarui');closeModal();});
-  else db.ref('/users/'+key).set(data).then(()=>{toast('Guru ditambahkan');closeModal();});
+  if(id)(dbRef('/users/'+id)||{update:()=>{}}).update(data).then(()=>{toast('Guru diperbarui');closeModal();});
+  else (dbRef('/users/'+key)||{set:()=>{}}).set(data).then(()=>{toast('Guru ditambahkan');closeModal();});
 }
-function hapusGuru(id){if(!confirm('Hapus guru ini?'))return;db.ref('/users/'+id).remove().then(()=>toast('Guru dihapus'));}
+function hapusGuru(id){if(!confirm('Hapus guru ini?'))return;(dbRef('/users/'+id)||{remove:()=>{}}).remove().then(()=>toast('Guru dihapus'));}
 
 // ═══ NILAI KELULUSAN (Admin) ═══
 function renderNilaiKelulusan(){
@@ -1151,18 +1165,18 @@ function uploadFile(key,inp){
   if(file.size>700000){toast('File terlalu besar (maks 700KB)','error');return;}
   const r=new FileReader();r.onload=e=>{
     const b64=e.target.result;pengaturan[key]=b64;
-    db.ref('/pengaturan/'+key).set(b64).then(()=>{toast('Upload berhasil');applyPengaturan();renderPengaturan();});
+    (dbRef('/pengaturan/'+key)||{set:()=>{}}).set(b64).then(()=>{toast('Upload berhasil');applyPengaturan();renderPengaturan();});
   };r.readAsDataURL(file);
 }
 function saveInfoSekolah(){
   const u={kepsek:v('f-kepsek'),nipKepsek:v('f-nip'),nomorSK:v('f-sk'),kota:v('f-kota'),tahunPelajaran:v('f-tp'),tanggalSKL:v('f-tgl-skl')};
-  Object.assign(pengaturan,u);db.ref('/pengaturan').update(u).then(()=>toast('Info disimpan'));
+  Object.assign(pengaturan,u);(dbRef('/pengaturan')||{update:()=>{}}).update(u).then(()=>toast('Info disimpan'));
 }
 function gantiPass(){
   const p=v('f-pb'),k=v('f-pk');
   if(!p){toast('Isi password baru','error');return;}if(p!==k){toast('Password tidak cocok','error');return;}
   const admin=allUsers.find(u=>u.role==='admin'&&u.username===currentUser.username);
-  if(admin)db.ref('/users/'+admin.id+'/password').set(p).then(()=>toast('Password diubah'));
+  if(admin)(dbRef('/users/'+admin.id+'/password')||{set:()=>{}}).set(p).then(()=>toast('Password diubah'));
 }
 
 // ═══════════════════════════════════════════════
@@ -1281,8 +1295,8 @@ function saveND(siswaId,mapelId,field,val,naId,isUs4Mapel=true){
   clearTimeout(debounceTimers[dbKey+'_'+field]);
   debounceTimers[dbKey+'_'+field]=setTimeout(()=>{
     const num=val.trim()!==''?parseFloat(val):null;
-    if(num!==null&&!isNaN(num))db.ref('/nilai/'+dbKey+'/'+field).set(num);
-    else db.ref('/nilai/'+dbKey+'/'+field).remove();
+    if(num!==null&&!isNaN(num))(dbRef('/nilai/'+dbKey+'/'+field)||{set:()=>{}}).set(num);
+    else (dbRef('/nilai/'+dbKey+'/'+field)||{remove:()=>{}}).remove();
     if(!allNilai[dbKey])allNilai[dbKey]={};
     if(num!==null&&!isNaN(num))allNilai[dbKey][field]=num;
     else delete allNilai[dbKey][field];
@@ -1358,8 +1372,8 @@ function saveSiswaND(dbKey,field,val){
   clearTimeout(debounceTimers['siswa_'+dbKey+'_'+field]);
   debounceTimers['siswa_'+dbKey+'_'+field]=setTimeout(()=>{
     const num=val.trim()!==''?parseFloat(val):null;
-    if(num!==null&&!isNaN(num))db.ref('/nilai/'+dbKey+'/'+field).set(num);
-    else db.ref('/nilai/'+dbKey+'/'+field).remove();
+    if(num!==null&&!isNaN(num))(dbRef('/nilai/'+dbKey+'/'+field)||{set:()=>{}}).set(num);
+    else (dbRef('/nilai/'+dbKey+'/'+field)||{remove:()=>{}}).remove();
     if(!allNilai[dbKey])allNilai[dbKey]={};
     if(num!==null&&!isNaN(num))allNilai[dbKey][field]=num;
     else delete allNilai[dbKey][field];
@@ -1511,12 +1525,12 @@ function simpanNomorSKL(siswaId){
   const nomor=document.getElementById('inp-skl-nomor')?.value||'';
   const key='nomorSKL_'+siswaId;
   pengaturan[key]=nomor;
-  db.ref('/pengaturan/'+key).set(nomor).then(()=>toast('Nomor SKL disimpan'));
+  (dbRef('/pengaturan/'+key)||{set:()=>{}}).set(nomor).then(()=>toast('Nomor SKL disimpan'));
 }
 function simpanNomorSK(){
   const nomor=document.getElementById('inp-sk-nomor')?.value||'';
   pengaturan.nomorSK=nomor;
-  db.ref('/pengaturan/nomorSK').set(nomor).then(()=>toast('Nomor SK disimpan'));
+  (dbRef('/pengaturan/nomorSK')||{set:()=>{}}).set(nomor).then(()=>toast('Nomor SK disimpan'));
 }
 
 // ═══ ICONS ═══
@@ -1534,6 +1548,22 @@ function iUp(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none
 function iEdit(){return`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>`}
 function iTrash(){return`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`}
 function iPrint(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`}
+</script>
+<!-- CDN dimuat TERAKHIR agar tidak blocking halaman -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="console.warn('Firebase gagal dimuat')"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="console.warn('Firebase DB gagal dimuat')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('SheetJS gagal dimuat')"></script>
+<script>
+// Re-init Firebase setelah CDN dimuat
+(function(){
+  try{
+    if(typeof firebase!=='undefined' && !db){
+      const cfg={apiKey:"AIzaSyBiv-YC0KLaq6ecCc6gSlgGhdbnxulSt6c",databaseURL:"https://sinilai-majmaulbahrain-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"sinilai-majmaulbahrain"};
+      if(!firebase.apps.length) firebase.initializeApp(cfg);
+      db=firebase.database();
+    }
+  }catch(e){console.warn('Firebase re-init:',e);}
+})();
 </script>
 </body>
 </html>
