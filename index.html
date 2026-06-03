@@ -306,6 +306,7 @@ h1,h2,h3{font-family:'Playfair Display',serif}
 .ttd-jabatan{margin:2px 0 0;font-size:12pt}
 .ttd-gap{height:68px;display:block}
 .ttd-nama{margin:0;font-size:12pt;font-weight:700;text-decoration:underline}
+.ttd-nuks{margin:1px 0 0;font-size:10.5pt;font-style:normal}
 .ttd-nip{margin:2px 0 0;font-size:11pt}
 /* Catatan kaki */
 .skl-catatan{margin-top:18px;font-size:9.5pt;font-style:italic;line-height:1.6}
@@ -659,10 +660,12 @@ function closeModal(){document.getElementById('modal-bg').classList.add('hide');
 document.getElementById('modal-bg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
 
 // ═══ FORMULA NILAI ═══
-function hitungNilaiAkhir(d){
+// isUs4Mapel: true hanya untuk BI, BIng, MTK, IPA
+function hitungNilaiAkhir(d,isUs4Mapel=true){
   if(!d)return 0;
   const rv=['s1','s2','s3','s4','s5'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-  const kv=['usMapel','us4Mapel','praktik'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
+  const kompFields=['usMapel',...(isUs4Mapel?['us4Mapel']:[]),'praktik'];
+  const kv=kompFields.map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
   if(!rv.length&&!kv.length)return 0;
   const rr=rv.length?rv.reduce((a,b)=>a+parseFloat(b),0)/rv.length:0;
   const rk=kv.length?kv.reduce((a,b)=>a+parseFloat(b),0)/kv.length:0;
@@ -713,6 +716,15 @@ function renderDataSiswa(){
       <select class="form-select" id="filter-kelas" style="width:100px;padding:8px" onchange="renderSiswaList()">
         <option value="">Semua</option><option>IX-1</option><option>IX-2</option><option>IX-3</option>
       </select>
+      <button class="btn btn-outline" onclick="downloadTemplateSiswa()" title="Download template CSV">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-text-hide">Template</span>
+      </button>
+      <label class="btn btn-outline" style="cursor:pointer" title="Import dari CSV">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span class="btn-text-hide">Import CSV</span>
+        <input type="file" accept=".csv" style="display:none" onchange="importSiswaCSV(this)"/>
+      </label>
       <button class="btn btn-primary" onclick="openModalSiswa(null)">${iPlus()}<span class="btn-text-hide">Tambah</span></button>
     </div>
   </div>
@@ -722,6 +734,37 @@ function renderDataSiswa(){
   </table></div></div>
   <div class="cards-view" id="cards-siswa"></div>`;
   renderSiswaList();
+}
+function downloadTemplateSiswa(){
+  const header='NIS,NISN,Nama Lengkap,Tempat Lahir,Tanggal Lahir (YYYY-MM-DD),Jenis Kelamin (L/P),Kelas (IX-1/IX-2/IX-3),Nama Orang Tua';
+  const contoh='12301,3123456789,Ahmad Fauzan,Bogor,2009-03-15,L,IX-1,Bapak Fauzan';
+  const blob=new Blob([header+'\n'+contoh],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='template_siswa_sinilai.csv';a.click();
+  toast('Template CSV diunduh');
+}
+function importSiswaCSV(inp){
+  const file=inp.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const lines=e.target.result.split('\n').filter(l=>l.trim());
+    if(lines.length<2){toast('File CSV kosong','error');return;}
+    const rows=lines.slice(1); // skip header
+    let count=0;
+    const promises=rows.map(row=>{
+      const cols=row.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+      if(!cols[2])return Promise.resolve(); // skip baris tanpa nama
+      const id='siswa_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+      const data={id,nis:cols[0]||'',nisn:cols[1]||'',nama:cols[2],tempatLahir:cols[3]||'',tanggalLahir:cols[4]||'',jk:cols[5]||'L',kelas:cols[6]||'IX-1',namaOrtu:cols[7]||''};
+      count++;
+      return db.ref('/siswa/'+id).set(data);
+    });
+    Promise.all(promises).then(()=>{
+      toast(`${count} siswa berhasil diimport`);
+      inp.value='';
+    });
+  };
+  reader.readAsText(file);
 }
 function renderSiswaList(){
   const q=(document.getElementById('search-siswa')?.value||'').toLowerCase();
@@ -748,14 +791,18 @@ function renderSiswaList(){
   </div>`).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
 }
 function openModalSiswa(s){
-  showModal(s?'Edit Siswa':'Tambah Siswa',`
+  const isEdit=!!s;
+  showModal(isEdit?'Edit Siswa':'Tambah Siswa',`
+    ${!isEdit?`<div style="background:var(--em-light);border:1.5px solid var(--em-mid);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--em2)">
+      💡 Ingin tambah banyak siswa sekaligus? Gunakan <strong>Import CSV</strong> di halaman Data Siswa.
+    </div>`:''}
     <div class="form-row">
-      <div class="form-group"><label class="form-label">NIS</label><input class="form-input" id="f-nis" value="${s?.nis||''}"/></div>
-      <div class="form-group"><label class="form-label">NISN</label><input class="form-input" id="f-nisn" value="${s?.nisn||''}"/></div>
+      <div class="form-group"><label class="form-label">NIS</label><input class="form-input" id="f-nis" value="${s?.nis||''}" placeholder="Nomor Induk Siswa"/></div>
+      <div class="form-group"><label class="form-label">NISN</label><input class="form-input" id="f-nisn" value="${s?.nisn||''}" placeholder="10 digit NISN"/></div>
     </div>
-    <div class="form-group"><label class="form-label">Nama Lengkap</label><input class="form-input" id="f-nama" value="${s?.nama||''}"/></div>
+    <div class="form-group"><label class="form-label">Nama Lengkap</label><input class="form-input" id="f-nama" value="${s?.nama||''}" placeholder="Nama lengkap siswa"/></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Tempat Lahir</label><input class="form-input" id="f-ttl" value="${s?.tempatLahir||''}"/></div>
+      <div class="form-group"><label class="form-label">Tempat Lahir</label><input class="form-input" id="f-ttl" value="${s?.tempatLahir||''}" placeholder="Kota lahir"/></div>
       <div class="form-group"><label class="form-label">Tanggal Lahir</label><input class="form-input" type="date" id="f-tgl" value="${s?.tanggalLahir||''}"/></div>
     </div>
     <div class="form-row">
@@ -768,8 +815,8 @@ function openModalSiswa(s){
           <option ${s?.kelas==='IX-3'?'selected':''}>IX-3</option>
         </select></div>
     </div>
-    <div class="form-group"><label class="form-label">Nama Orang Tua</label><input class="form-input" id="f-ortu" value="${s?.namaOrtu||''}"/></div>`,
-  [{label:'Batal',cls:'btn-outline',action:'closeModal()'},{label:s?'Simpan':'Tambah',cls:'btn-primary',action:`saveSiswa('${s?.id||''}')`}]);
+    <div class="form-group"><label class="form-label">Nama Orang Tua</label><input class="form-input" id="f-ortu" value="${s?.namaOrtu||''}" placeholder="Nama ayah/ibu/wali"/></div>`,
+  [{label:'Batal',cls:'btn-outline',action:'closeModal()'},{label:isEdit?'Simpan':'Tambah Siswa',cls:'btn-primary',action:`saveSiswa('${s?.id||''}')`}]);
 }
 function saveSiswa(id){
   const data={nis:v('f-nis'),nisn:v('f-nisn'),nama:v('f-nama'),tempatLahir:v('f-ttl'),tanggalLahir:v('f-tgl'),jk:v('f-jk'),kelas:v('f-kelas'),namaOrtu:v('f-ortu')};
@@ -1047,11 +1094,14 @@ function renderNilaiTable(){
   if(siswaList.length===0){area.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Tidak ada siswa di kelas ini</div>';return;}
 
   // MOBILE: kartu per siswa (tap untuk expand)
+  const mapelNamaAktifMob=allMapel.find(m=>m.id===selectedMapelGuru)?.nama||'';
+  const isUs4MapelMob=/bahasa indonesia|bahasa inggris|matematika|ilmu pengetahuan alam|ipa/i.test(mapelNamaAktifMob);
   if(window.innerWidth<=768){
     area.innerHTML=siswaList.map(s=>{
       const key=`${s.id}_${selectedMapelGuru}`;
       const d=allNilai[key]||{};
-      const na=hitungNilaiAkhir(d);
+      const na=hitungNilaiAkhir(d,isUs4MapelMob);
+      const fields=[['s1','S1'],['s2','S2'],['s3','S3'],['s4','S4'],['s5','S5'],['usMapel','US Mapel'],...(isUs4MapelMob?[['us4Mapel','US 4 Mapel']]:[]),['praktik','Praktik']];
       return`<div class="siswa-card">
         <div class="siswa-card-header" onclick="toggleExp('exp-${s.id}')" style="cursor:pointer">
           <div class="siswa-avatar">${s.nama.charAt(0)}</div>
@@ -1063,11 +1113,11 @@ function renderNilaiTable(){
         </div>
         <div class="expand-panel" id="exp-${s.id}">
           <div class="expand-grid">
-            ${[['s1','S1'],['s2','S2'],['s3','S3'],['s4','S4'],['s5','S5'],['usMapel','US Mapel'],['us4Mapel','US 4 Mapel'],['praktik','Praktik']].map(([f,lbl])=>`
+            ${fields.map(([f,lbl])=>`
             <div>
               <div class="form-label">${lbl}</div>
               <input class="form-input" style="text-align:center;font-size:16px;font-weight:700" value="${d[f]!==undefined?d[f]:''}"
-                oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-mob-${s.id}')"/>
+                oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-mob-${s.id}',${isUs4MapelMob})"/>
             </div>`).join('')}
           </div>
         </div>
@@ -1077,6 +1127,10 @@ function renderNilaiTable(){
   }
 
   // DESKTOP: tabel scrollable horizontal
+  // US 4 Mapel hanya untuk: Bahasa Indonesia, Bahasa Inggris, Matematika, IPA
+  const mapelNamaAktif=allMapel.find(m=>m.id===selectedMapelGuru)?.nama||'';
+  const isUs4Mapel=/bahasa indonesia|bahasa inggris|matematika|ilmu pengetahuan alam|ipa/i.test(mapelNamaAktif);
+
   area.innerHTML=`
   <div class="nilai-table-outer">
     <table class="nilai-table">
@@ -1085,7 +1139,7 @@ function renderNilaiTable(){
           <th class="col-sticky col-sticky-0">No</th>
           <th class="col-sticky col-sticky-1">Nama Siswa</th>
           <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th>
-          <th>US Mapel</th><th>US 4 Mapel</th><th>Praktik</th>
+          <th>US Mapel</th>${isUs4Mapel?'<th>US 4 Mapel</th>':''}<th>Praktik</th>
           <th class="col-final">Nilai Akhir</th>
         </tr>
       </thead>
@@ -1093,13 +1147,14 @@ function renderNilaiTable(){
         ${siswaList.map((s,i)=>{
           const key=`${s.id}_${selectedMapelGuru}`;
           const d=allNilai[key]||{};
-          const na=hitungNilaiAkhir(d);
+          const na=hitungNilaiAkhir(d,isUs4Mapel);
+          const fields=['s1','s2','s3','s4','s5','usMapel',...(isUs4Mapel?['us4Mapel']:[]),'praktik'];
           return`<tr>
             <td class="col-sticky col-sticky-0">${i+1}</td>
             <td class="col-sticky col-sticky-1" title="${s.nama}">${s.nama}</td>
-            ${['s1','s2','s3','s4','s5','usMapel','us4Mapel','praktik'].map(f=>`
+            ${fields.map(f=>`
             <td><input class="nilai-input" value="${d[f]!==undefined?d[f]:''}"
-              oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-desk-${s.id}')"/></td>`).join('')}
+              oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-desk-${s.id}',${isUs4Mapel})"/></td>`).join('')}
             <td class="col-final"><span id="na-desk-${s.id}">${na?na.toFixed(2):'-'}</span></td>
           </tr>`;
         }).join('')}
@@ -1108,7 +1163,7 @@ function renderNilaiTable(){
   </div>`;
 }
 function toggleExp(id){const el=document.getElementById(id);if(el)el.classList.toggle('open');}
-function saveND(siswaId,mapelId,field,val,naId){
+function saveND(siswaId,mapelId,field,val,naId,isUs4Mapel=true){
   const dbKey=`${siswaId}_${mapelId}`;
   clearTimeout(debounceTimers[dbKey+'_'+field]);
   debounceTimers[dbKey+'_'+field]=setTimeout(()=>{
@@ -1118,7 +1173,7 @@ function saveND(siswaId,mapelId,field,val,naId){
     if(!allNilai[dbKey])allNilai[dbKey]={};
     if(num!==null&&!isNaN(num))allNilai[dbKey][field]=num;
     else delete allNilai[dbKey][field];
-    const na=hitungNilaiAkhir(allNilai[dbKey]);
+    const na=hitungNilaiAkhir(allNilai[dbKey],isUs4Mapel);
     const el=document.getElementById(naId);
     if(el)el.textContent=na?na.toFixed(window.innerWidth<=768?0:2):'-';
   },800);
@@ -1290,12 +1345,18 @@ function cetakSKL(siswaId){
     </div>
   </div>
 
-  <!-- Edit nomor SKL (no print) -->
+  <!-- Edit bar: Nomor SKL + Nomor SK (no print) -->
   <div class="skl-edit-bar no-print">
     <label>Nomor SKL :</label>
-    <input id="inp-skl-nomor" value="${nomorSKL}" placeholder="Contoh: 421/SKL/MB/VI/2026/001"
+    <input id="inp-skl-nomor" value="${nomorSKL}" placeholder="421/SKL/MB/VI/2026/001"
       oninput="document.getElementById('skl-nomor-text').textContent=this.value||'...............................'"/>
-    <button class="btn btn-gold btn-sm" onclick="simpanNomorSKL('${siswaId}')">Simpan</button>
+    <button class="btn btn-gold btn-sm" onclick="simpanNomorSKL('${siswaId}')">Simpan SKL</button>
+  </div>
+  <div class="skl-edit-bar no-print" style="background:#e8f5ef;border-color:var(--em)">
+    <label style="color:var(--em2)">Nomor SK :</label>
+    <input id="inp-sk-nomor" value="${nomorSK}" placeholder="421/SK.68/MB/VI/2026"
+      oninput="document.getElementById('skl-sk-text').textContent=this.value||'..............................'"/>
+    <button class="btn btn-primary btn-sm" onclick="simpanNomorSK()">Simpan SK</button>
   </div>
 
   <!-- DOKUMEN SKL -->
@@ -1317,11 +1378,11 @@ function cetakSKL(siswaId){
     <!-- JUDUL -->
     <div class="skl-judul">SURAT KETERANGAN KELULUSAN</div>
 
-    <!-- NOMOR -->
+    <!-- NOMOR SKL -->
     <div class="skl-nomor">Nomor : <span id="skl-nomor-text">${nomorSKL||'...............................'}</span></div>
 
-    <!-- PARAGRAF DASAR -->
-    <p class="skl-paragraf">Berdasarkan Surat Keputusan Kepala Sekolah Nomor ${nomorSK} tanggal ${tglSKL} tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran ${tp}, menerangkan bahwa:</p>
+    <!-- PARAGRAF DASAR — nomor SK bisa diedit inline -->
+    <p class="skl-paragraf">Berdasarkan Surat Keputusan Kepala Sekolah Nomor <span id="skl-sk-text">${nomorSK}</span> tanggal ${tglSKL} tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran ${tp}, menerangkan bahwa:</p>
 
     <!-- BIODATA SISWA (indent, 3 baris) -->
     <table class="skl-biodata">
@@ -1352,9 +1413,10 @@ function cetakSKL(siswaId){
     <div class="skl-ttd-row">
       <div class="skl-ttd-box">
         <p class="ttd-kota">${kota}, &nbsp; ${tglSKL}</p>
-        <p class="ttd-jabatan">Kepala,</p>
+        <p class="ttd-jabatan">Kepala Sekolah SMP-IT Majma'ul Bahrain,</p>
         <div class="ttd-gap"></div>
-        <p class="ttd-nama">${kepsek}</p>
+        <p class="ttd-nama">Hj. Miya Fahmiyawati, S.Pd.I</p>
+        <p class="ttd-nuks">NUKS : 19023L072020523210788</p>
         ${nip?`<p class="ttd-nip">NIP. ${nip}</p>`:''}
       </div>
     </div>
@@ -1371,6 +1433,11 @@ function simpanNomorSKL(siswaId){
   const key='nomorSKL_'+siswaId;
   pengaturan[key]=nomor;
   db.ref('/pengaturan/'+key).set(nomor).then(()=>toast('Nomor SKL disimpan'));
+}
+function simpanNomorSK(){
+  const nomor=document.getElementById('inp-sk-nomor')?.value||'';
+  pengaturan.nomorSK=nomor;
+  db.ref('/pengaturan/nomorSK').set(nomor).then(()=>toast('Nomor SK disimpan'));
 }
 
 // ═══ ICONS ═══
