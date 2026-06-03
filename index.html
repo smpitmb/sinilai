@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --em:#1a6b4a;--em2:#145439;--em3:#0e3d2b;--em-light:#e8f5ef;--em-mid:#b2d9c6;
@@ -22,8 +23,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 h1,h2,h3{font-family:'Playfair Display',serif}
 
 /* LOADING */
-#loading-screen{position:fixed;inset:0;background:var(--em3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s}
-#loading-screen.hide{opacity:0;pointer-events:none}
+#loading-screen{position:fixed;inset:0;background:var(--em3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .4s}
+#loading-screen.hide{opacity:0;pointer-events:none;animation:none}
+#loading-screen.gone{display:none!important}
 .loader-logo{width:80px;height:80px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;animation:pulse 1.8s infinite}
 .loader-logo svg{width:44px;height:44px;fill:#fff}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(201,168,76,.5)}70%{box-shadow:0 0 0 20px rgba(201,168,76,0)}100%{box-shadow:0 0 0 0 rgba(201,168,76,0)}}
@@ -306,6 +308,7 @@ h1,h2,h3{font-family:'Playfair Display',serif}
 .ttd-jabatan{margin:2px 0 0;font-size:12pt}
 .ttd-gap{height:68px;display:block}
 .ttd-nama{margin:0;font-size:12pt;font-weight:700;text-decoration:underline}
+.ttd-nuks{margin:1px 0 0;font-size:10.5pt;font-style:normal}
 .ttd-nip{margin:2px 0 0;font-size:11pt}
 /* Catatan kaki */
 .skl-catatan{margin-top:18px;font-size:9.5pt;font-style:italic;line-height:1.6}
@@ -459,20 +462,39 @@ let selectedKelasGuru='IX-1',selectedMapelGuru=null;
 let selectedMapelSiswa=null;
 
 // ═══ INIT ═══
-window.onload=async()=>{
+window.onload=()=>{
   updateDate();setInterval(updateDate,60000);
-  await loadPengaturan();applyPengaturan();
-  setTimeout(()=>{
-    document.getElementById('loading-screen').classList.add('hide');
-    document.getElementById('login-screen').classList.remove('hide');
-  },2400);
+  // Paksa loading screen hilang maks 5 detik
+  const hideLoading=()=>{
+    const ls=document.getElementById('loading-screen');
+    const login=document.getElementById('login-screen');
+    ls.classList.add('hide');
+    login.classList.remove('hide');
+    setTimeout(()=>ls.classList.add('gone'),500);
+  };
+  const fallback=setTimeout(hideLoading,5000);
+  // Coba load pengaturan, selesai dalam 2.4 detik atau pakai fallback
+  loadPengaturan()
+    .then(()=>applyPengaturan())
+    .catch(()=>{})
+    .finally(()=>{
+      clearTimeout(fallback);
+      setTimeout(hideLoading,400);
+    });
 };
 function updateDate(){
   const el=document.getElementById('header-date');
   if(el)el.textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 }
 async function loadPengaturan(){
-  return new Promise(r=>{db.ref('/pengaturan').once('value',s=>{pengaturan=s.val()||{};r();});});
+  return new Promise(r=>{
+    const t=setTimeout(()=>r(),4000); // fallback 4 detik
+    db.ref('/pengaturan').once('value',s=>{
+      clearTimeout(t);
+      pengaturan=s.val()||{};
+      r();
+    },()=>{clearTimeout(t);r();}); // onError juga resolve
+  });
 }
 function applyPengaturan(){
   if(pengaturan.logo){
@@ -586,8 +608,7 @@ const MENUS={
   ],
   guru:[{id:'nilai-guru',label:'Input Nilai',icon:()=>iNilai(),section:'Guru'}],
   siswa:[
-    {id:'nilai-siswa',label:'Nilai Saya',icon:()=>iNilai(),section:'Siswa'},
-    {id:'skl-siswa',label:'Lihat SKL',icon:()=>iSKL()},
+    {id:'nilai-siswa',label:'Input Nilai',icon:()=>iNilai(),section:'Siswa'},
   ]
 };
 function setupSidebar(){
@@ -638,7 +659,7 @@ function navigateTo(id){
     'dashboard':renderDashboard,'data-siswa':renderDataSiswa,'mapel':renderMapel,
     'data-guru':renderDataGuru,'nilai-kelulusan':renderNilaiKelulusan,'legger':renderLegger,
     'pengaturan':renderPengaturan,'nilai-guru':renderNilaiGuru,
-    'nilai-siswa':renderNilaiSiswa,'skl-siswa':()=>cetakSKL(currentUser.id),
+    'nilai-siswa':renderNilaiSiswa,
   }[id];
   if(fn)fn();
 }
@@ -659,10 +680,12 @@ function closeModal(){document.getElementById('modal-bg').classList.add('hide');
 document.getElementById('modal-bg').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
 
 // ═══ FORMULA NILAI ═══
-function hitungNilaiAkhir(d){
+// isUs4Mapel: true hanya untuk BI, BIng, MTK, IPA
+function hitungNilaiAkhir(d,isUs4Mapel=true){
   if(!d)return 0;
   const rv=['s1','s2','s3','s4','s5'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-  const kv=['usMapel','us4Mapel','praktik'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
+  const kompFields=['usMapel',...(isUs4Mapel?['us4Mapel']:[]),'praktik'];
+  const kv=kompFields.map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
   if(!rv.length&&!kv.length)return 0;
   const rr=rv.length?rv.reduce((a,b)=>a+parseFloat(b),0)/rv.length:0;
   const rk=kv.length?kv.reduce((a,b)=>a+parseFloat(b),0)/kv.length:0;
@@ -709,10 +732,20 @@ function renderDataSiswa(){
   <div class="section-header">
     <div class="section-title">Data Siswa</div>
     <div class="section-actions">
-      <input class="form-input" id="search-siswa" placeholder="Cari nama/NIS..." style="width:170px;padding:8px 12px" oninput="renderSiswaList()"/>
-      <select class="form-select" id="filter-kelas" style="width:100px;padding:8px" onchange="renderSiswaList()">
+      <input class="form-input" id="search-siswa" placeholder="Cari nama/NIS..." style="width:160px;padding:8px 12px" oninput="renderSiswaList()"/>
+      <select class="form-select" id="filter-kelas" style="width:96px;padding:8px" onchange="renderSiswaList()">
         <option value="">Semua</option><option>IX-1</option><option>IX-2</option><option>IX-3</option>
       </select>
+      <button class="btn btn-outline" onclick="downloadTemplateSiswa()" title="Download template Excel">
+        ${iDown()}<span class="btn-text-hide">Template</span>
+      </button>
+      <label class="btn btn-outline" style="cursor:pointer" title="Import dari Excel (.xlsx)">
+        ${iUp()}<span class="btn-text-hide">Import Excel</span>
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importSiswaExcel(this)"/>
+      </label>
+      <button class="btn btn-danger" onclick="hapusSemuaSiswa()" title="Hapus semua siswa">
+        ${iTrash()}<span class="btn-text-hide">Hapus Semua</span>
+      </button>
       <button class="btn btn-primary" onclick="openModalSiswa(null)">${iPlus()}<span class="btn-text-hide">Tambah</span></button>
     </div>
   </div>
@@ -722,6 +755,66 @@ function renderDataSiswa(){
   </table></div></div>
   <div class="cards-view" id="cards-siswa"></div>`;
   renderSiswaList();
+}
+// ── TEMPLATE & IMPORT EXCEL SISWA ──
+function downloadTemplateSiswa(){
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Memuat library Excel...','info');return;}
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['NIS','NISN','Nama Lengkap','Tempat Lahir','Tanggal Lahir (YYYY-MM-DD)','Jenis Kelamin (L/P)','Kelas (IX-1/IX-2/IX-3)','Nama Orang Tua'],
+    ['12301','3123456789','Ahmad Fauzan','Bogor','2009-03-15','L','IX-1','Bapak Fauzan'],
+    ['12302','3123456790','Siti Rahmah','Jakarta','2009-07-20','P','IX-2','Ibu Rahma'],
+  ]);
+  // lebar kolom
+  ws['!cols']=[{wch:10},{wch:14},{wch:24},{wch:14},{wch:22},{wch:20},{wch:22},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Data Siswa');
+  XLSX.writeFile(wb,'template_siswa_sinilai.xlsx');
+  toast('Template Excel diunduh ✓');
+}
+function importSiswaExcel(inp){
+  const file=inp.files[0];if(!file)return;
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Library Excel belum siap','error');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){toast('File Excel kosong','error');return;}
+      let count=0;
+      const promises=rows.slice(1).map(r=>{
+        const nama=(r[2]||'').toString().trim();
+        if(!nama)return Promise.resolve();
+        const id='siswa_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+        // Tanggal: bisa angka serial Excel atau string
+        let tgl=r[4]||'';
+        if(typeof tgl==='number'){
+          // Excel serial date → JS date
+          const d=new Date(Math.round((tgl-25569)*86400*1000));
+          tgl=d.toISOString().slice(0,10);
+        } else {
+          tgl=tgl.toString().trim();
+        }
+        const data={id,nis:(r[0]||'').toString().trim(),nisn:(r[1]||'').toString().trim(),
+          nama,tempatLahir:(r[3]||'').toString().trim(),tanggalLahir:tgl,
+          jk:(r[5]||'L').toString().trim()||'L',kelas:(r[6]||'IX-1').toString().trim()||'IX-1',
+          namaOrtu:(r[7]||'').toString().trim()};
+        count++;
+        return db.ref('/siswa/'+id).set(data);
+      });
+      Promise.all(promises).then(()=>{toast(`${count} siswa berhasil diimport ✓`);inp.value='';});
+    }catch(err){toast('Gagal membaca file Excel','error');console.error(err);}
+  };
+  reader.readAsBinaryString(file);
+}
+function hapusSemuaSiswa(){
+  const konfirm1=confirm(`⚠️ PERINGATAN!\nAnda akan menghapus SEMUA ${allSiswa.length} data siswa.\nTindakan ini tidak dapat dibatalkan!\n\nLanjutkan?`);
+  if(!konfirm1)return;
+  const konfirm2=prompt('Ketik "HAPUS SEMUA" (huruf kapital) untuk konfirmasi:');
+  if(konfirm2!=='HAPUS SEMUA'){toast('Penghapusan dibatalkan','info');return;}
+  db.ref('/siswa').remove().then(()=>toast(`Semua data siswa berhasil dihapus`,'success'));
 }
 function renderSiswaList(){
   const q=(document.getElementById('search-siswa')?.value||'').toLowerCase();
@@ -748,14 +841,18 @@ function renderSiswaList(){
   </div>`).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
 }
 function openModalSiswa(s){
-  showModal(s?'Edit Siswa':'Tambah Siswa',`
+  const isEdit=!!s;
+  showModal(isEdit?'Edit Siswa':'Tambah Siswa',`
+    ${!isEdit?`<div style="background:var(--em-light);border:1.5px solid var(--em-mid);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--em2)">
+      💡 Ingin tambah banyak siswa sekaligus? Gunakan <strong>Import Excel</strong> di halaman Data Siswa.
+    </div>`:''}
     <div class="form-row">
-      <div class="form-group"><label class="form-label">NIS</label><input class="form-input" id="f-nis" value="${s?.nis||''}"/></div>
-      <div class="form-group"><label class="form-label">NISN</label><input class="form-input" id="f-nisn" value="${s?.nisn||''}"/></div>
+      <div class="form-group"><label class="form-label">NIS</label><input class="form-input" id="f-nis" value="${s?.nis||''}" placeholder="Nomor Induk Siswa"/></div>
+      <div class="form-group"><label class="form-label">NISN</label><input class="form-input" id="f-nisn" value="${s?.nisn||''}" placeholder="10 digit NISN"/></div>
     </div>
-    <div class="form-group"><label class="form-label">Nama Lengkap</label><input class="form-input" id="f-nama" value="${s?.nama||''}"/></div>
+    <div class="form-group"><label class="form-label">Nama Lengkap</label><input class="form-input" id="f-nama" value="${s?.nama||''}" placeholder="Nama lengkap siswa"/></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Tempat Lahir</label><input class="form-input" id="f-ttl" value="${s?.tempatLahir||''}"/></div>
+      <div class="form-group"><label class="form-label">Tempat Lahir</label><input class="form-input" id="f-ttl" value="${s?.tempatLahir||''}" placeholder="Kota lahir"/></div>
       <div class="form-group"><label class="form-label">Tanggal Lahir</label><input class="form-input" type="date" id="f-tgl" value="${s?.tanggalLahir||''}"/></div>
     </div>
     <div class="form-row">
@@ -768,8 +865,8 @@ function openModalSiswa(s){
           <option ${s?.kelas==='IX-3'?'selected':''}>IX-3</option>
         </select></div>
     </div>
-    <div class="form-group"><label class="form-label">Nama Orang Tua</label><input class="form-input" id="f-ortu" value="${s?.namaOrtu||''}"/></div>`,
-  [{label:'Batal',cls:'btn-outline',action:'closeModal()'},{label:s?'Simpan':'Tambah',cls:'btn-primary',action:`saveSiswa('${s?.id||''}')`}]);
+    <div class="form-group"><label class="form-label">Nama Orang Tua</label><input class="form-input" id="f-ortu" value="${s?.namaOrtu||''}" placeholder="Nama ayah/ibu/wali"/></div>`,
+  [{label:'Batal',cls:'btn-outline',action:'closeModal()'},{label:isEdit?'Simpan':'Tambah Siswa',cls:'btn-primary',action:`saveSiswa('${s?.id||''}')`}]);
 }
 function saveSiswa(id){
   const data={nis:v('f-nis'),nisn:v('f-nisn'),nama:v('f-nama'),tempatLahir:v('f-ttl'),tanggalLahir:v('f-tgl'),jk:v('f-jk'),kelas:v('f-kelas'),namaOrtu:v('f-ortu')};
@@ -826,7 +923,16 @@ function renderDataGuru(){
   const gurus=allUsers.filter(u=>u.role==='guru');
   document.getElementById('content').innerHTML=`
   <div class="section-header"><div class="section-title">Data Guru</div>
-    <div class="section-actions"><button class="btn btn-primary" onclick="openModalGuru(null)">${iPlus()}<span class="btn-text-hide">Tambah</span></button></div>
+    <div class="section-actions">
+      <button class="btn btn-outline" onclick="downloadTemplateGuru()" title="Download template Excel">
+        ${iDown()}<span class="btn-text-hide">Template</span>
+      </button>
+      <label class="btn btn-outline" style="cursor:pointer" title="Import dari Excel (.xlsx)">
+        ${iUp()}<span class="btn-text-hide">Import Excel</span>
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importGuruExcel(this)"/>
+      </label>
+      <button class="btn btn-primary" onclick="openModalGuru(null)">${iPlus()}<span class="btn-text-hide">Tambah</span></button>
+    </div>
   </div>
   <div class="table-wrap desktop-only"><div class="table-scroll"><table class="data-table">
     <thead><tr><th>No</th><th>Nama Guru</th><th>Username</th><th>Mapel Diampu</th><th>Aksi</th></tr></thead>
@@ -852,6 +958,60 @@ function renderDataGuru(){
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${md.map(m=>`<span class="badge badge-gold">${m}</span>`).join('')||'<span style="font-size:12px;color:var(--text3)">Belum ada mapel</span>'}</div>
     </div>`;
   }).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada guru</div>'}</div>`;
+}
+// ── TEMPLATE & IMPORT EXCEL GURU ──
+function downloadTemplateGuru(){
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Memuat library Excel...','info');return;}
+  // Baris mapel untuk referensi
+  const mapelRef=allMapel.length>0
+    ?allMapel.map(m=>m.nama).join(', ')
+    :'(belum ada mapel — isi nama mapel sesuai yang ada di sistem)';
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Nama Lengkap','Username','Password','Mata Pelajaran Diampu (pisah koma)'],
+    ['Ahmad Guru','aguru','pass123','Matematika, Bahasa Indonesia'],
+    ['Siti Pengajar','spengajar','pass456','Bahasa Inggris'],
+    ['','','',''],
+    ['--- REFERENSI MAPEL TERSEDIA ---','','',''],
+    [mapelRef,'','',''],
+  ]);
+  ws['!cols']=[{wch:26},{wch:16},{wch:14},{wch:50}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Data Guru');
+  XLSX.writeFile(wb,'template_guru_sinilai.xlsx');
+  toast('Template Excel Guru diunduh ✓');
+}
+function importGuruExcel(inp){
+  const file=inp.files[0];if(!file)return;
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Library Excel belum siap','error');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){toast('File Excel kosong','error');return;}
+      let count=0;
+      const promises=rows.slice(1).map(r=>{
+        const nama=(r[0]||'').toString().trim();
+        const uname=(r[1]||'').toString().trim();
+        const pass=(r[2]||'').toString().trim();
+        if(!nama||!uname||!pass)return Promise.resolve();
+        // Cocokkan nama mapel ke mapelIds
+        const mapelNamaList=(r[3]||'').toString().split(',').map(x=>x.trim()).filter(Boolean);
+        const mapelIds=mapelNamaList.map(mn=>{
+          const found=allMapel.find(m=>m.nama.toLowerCase()===mn.toLowerCase());
+          return found?found.id:null;
+        }).filter(Boolean);
+        const id='guru_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+        count++;
+        return db.ref('/users/'+id).set({id,nama,username:uname,password:pass,mapelIds,role:'guru'});
+      });
+      Promise.all(promises).then(()=>{toast(`${count} guru berhasil diimport ✓`);inp.value='';});
+    }catch(err){toast('Gagal membaca file Excel','error');console.error(err);}
+  };
+  reader.readAsBinaryString(file);
 }
 function openModalGuru(g){
   showModal(g?'Edit Guru':'Tambah Guru',`
@@ -1047,11 +1207,14 @@ function renderNilaiTable(){
   if(siswaList.length===0){area.innerHTML='<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Tidak ada siswa di kelas ini</div>';return;}
 
   // MOBILE: kartu per siswa (tap untuk expand)
+  const mapelNamaAktifMob=allMapel.find(m=>m.id===selectedMapelGuru)?.nama||'';
+  const isUs4MapelMob=/bahasa indonesia|bahasa inggris|matematika|ilmu pengetahuan alam|ipa/i.test(mapelNamaAktifMob);
   if(window.innerWidth<=768){
     area.innerHTML=siswaList.map(s=>{
       const key=`${s.id}_${selectedMapelGuru}`;
       const d=allNilai[key]||{};
-      const na=hitungNilaiAkhir(d);
+      const na=hitungNilaiAkhir(d,isUs4MapelMob);
+      const fields=[['s1','S1'],['s2','S2'],['s3','S3'],['s4','S4'],['s5','S5'],['usMapel','US Mapel'],...(isUs4MapelMob?[['us4Mapel','US 4 Mapel']]:[]),['praktik','Praktik']];
       return`<div class="siswa-card">
         <div class="siswa-card-header" onclick="toggleExp('exp-${s.id}')" style="cursor:pointer">
           <div class="siswa-avatar">${s.nama.charAt(0)}</div>
@@ -1063,11 +1226,11 @@ function renderNilaiTable(){
         </div>
         <div class="expand-panel" id="exp-${s.id}">
           <div class="expand-grid">
-            ${[['s1','S1'],['s2','S2'],['s3','S3'],['s4','S4'],['s5','S5'],['usMapel','US Mapel'],['us4Mapel','US 4 Mapel'],['praktik','Praktik']].map(([f,lbl])=>`
+            ${fields.map(([f,lbl])=>`
             <div>
               <div class="form-label">${lbl}</div>
               <input class="form-input" style="text-align:center;font-size:16px;font-weight:700" value="${d[f]!==undefined?d[f]:''}"
-                oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-mob-${s.id}')"/>
+                oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-mob-${s.id}',${isUs4MapelMob})"/>
             </div>`).join('')}
           </div>
         </div>
@@ -1077,6 +1240,10 @@ function renderNilaiTable(){
   }
 
   // DESKTOP: tabel scrollable horizontal
+  // US 4 Mapel hanya untuk: Bahasa Indonesia, Bahasa Inggris, Matematika, IPA
+  const mapelNamaAktif=allMapel.find(m=>m.id===selectedMapelGuru)?.nama||'';
+  const isUs4Mapel=/bahasa indonesia|bahasa inggris|matematika|ilmu pengetahuan alam|ipa/i.test(mapelNamaAktif);
+
   area.innerHTML=`
   <div class="nilai-table-outer">
     <table class="nilai-table">
@@ -1085,7 +1252,7 @@ function renderNilaiTable(){
           <th class="col-sticky col-sticky-0">No</th>
           <th class="col-sticky col-sticky-1">Nama Siswa</th>
           <th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th>
-          <th>US Mapel</th><th>US 4 Mapel</th><th>Praktik</th>
+          <th>US Mapel</th>${isUs4Mapel?'<th>US 4 Mapel</th>':''}<th>Praktik</th>
           <th class="col-final">Nilai Akhir</th>
         </tr>
       </thead>
@@ -1093,13 +1260,14 @@ function renderNilaiTable(){
         ${siswaList.map((s,i)=>{
           const key=`${s.id}_${selectedMapelGuru}`;
           const d=allNilai[key]||{};
-          const na=hitungNilaiAkhir(d);
+          const na=hitungNilaiAkhir(d,isUs4Mapel);
+          const fields=['s1','s2','s3','s4','s5','usMapel',...(isUs4Mapel?['us4Mapel']:[]),'praktik'];
           return`<tr>
             <td class="col-sticky col-sticky-0">${i+1}</td>
             <td class="col-sticky col-sticky-1" title="${s.nama}">${s.nama}</td>
-            ${['s1','s2','s3','s4','s5','usMapel','us4Mapel','praktik'].map(f=>`
+            ${fields.map(f=>`
             <td><input class="nilai-input" value="${d[f]!==undefined?d[f]:''}"
-              oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-desk-${s.id}')"/></td>`).join('')}
+              oninput="saveND('${s.id}','${selectedMapelGuru}','${f}',this.value,'na-desk-${s.id}',${isUs4Mapel})"/></td>`).join('')}
             <td class="col-final"><span id="na-desk-${s.id}">${na?na.toFixed(2):'-'}</span></td>
           </tr>`;
         }).join('')}
@@ -1108,7 +1276,7 @@ function renderNilaiTable(){
   </div>`;
 }
 function toggleExp(id){const el=document.getElementById(id);if(el)el.classList.toggle('open');}
-function saveND(siswaId,mapelId,field,val,naId){
+function saveND(siswaId,mapelId,field,val,naId,isUs4Mapel=true){
   const dbKey=`${siswaId}_${mapelId}`;
   clearTimeout(debounceTimers[dbKey+'_'+field]);
   debounceTimers[dbKey+'_'+field]=setTimeout(()=>{
@@ -1118,21 +1286,19 @@ function saveND(siswaId,mapelId,field,val,naId){
     if(!allNilai[dbKey])allNilai[dbKey]={};
     if(num!==null&&!isNaN(num))allNilai[dbKey][field]=num;
     else delete allNilai[dbKey][field];
-    const na=hitungNilaiAkhir(allNilai[dbKey]);
+    const na=hitungNilaiAkhir(allNilai[dbKey],isUs4Mapel);
     const el=document.getElementById(naId);
     if(el)el.textContent=na?na.toFixed(window.innerWidth<=768?0:2):'-';
   },800);
 }
 
 // ═══════════════════════════════════════════════
-// NILAI SISWA — siswa bisa input nilai raport S1-S5
+// NILAI SISWA — hanya input nilai raport S1-S5
 // ═══════════════════════════════════════════════
 function renderNilaiSiswa(){
   const s=currentUser;
-  // Sync siswa data terbaru
   const fresh=allSiswa.find(x=>x.id===s.id);
   if(fresh)Object.assign(currentUser,fresh);
-
   const myMapel=allMapel;
   if(!selectedMapelSiswa&&myMapel.length>0)selectedMapelSiswa=myMapel[0].id;
 
@@ -1146,34 +1312,15 @@ function renderNilaiSiswa(){
     </div>
   </div>
 
-  ${myMapel.length===0?'<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Belum ada mata pelajaran</div>':`
-  <div style="margin-bottom:12px">
-    <div class="form-label" style="margin-bottom:8px">Pilih Mata Pelajaran</div>
-    <div class="mapel-tabs" style="flex-wrap:wrap">
-      ${myMapel.map(m=>`<button class="mapel-tab ${selectedMapelSiswa===m.id?'active':''}" onclick="setSiswaMapel('${m.id}')">${m.nama}</button>`).join('')}
-    </div>
-  </div>
-  <div id="siswa-nilai-area"></div>
-
-  <div style="margin-top:20px" class="table-wrap always-show">
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px;color:var(--em)">Rekap Semua Nilai</div>
-    <div class="table-scroll">
-    <table class="data-table" style="min-width:500px">
-      <thead><tr><th>No</th><th>Mata Pelajaran</th><th>Rata Raport</th><th>Komponen 40%</th><th>Nilai Akhir</th></tr></thead>
-      <tbody id="rekap-tbody">
-        ${myMapel.map((m,i)=>{
-          const key=`${s.id}_${m.id}`;const d=allNilai[key]||{};
-          const rv=['s1','s2','s3','s4','s5'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-          const kv=['usMapel','us4Mapel','praktik'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-          const rr=rv.length?(rv.reduce((a,b)=>a+parseFloat(b),0)/rv.length).toFixed(2):'-';
-          const rk=kv.length?(kv.reduce((a,b)=>a+parseFloat(b),0)/kv.length).toFixed(2):'-';
-          const na=hitungNilaiAkhir(d);
-          return`<tr><td>${i+1}</td><td><strong>${m.nama}</strong></td><td>${rr}</td><td>${rk}</td>
-            <td><strong style="color:var(--em)">${na?na.toFixed(2):'-'}</strong></td></tr>`;
-        }).join('')}
-      </tbody>
-    </table></div>
-  </div>`}`;
+  ${myMapel.length===0
+    ?'<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Belum ada mata pelajaran</div>'
+    :`<div style="margin-bottom:14px">
+        <div class="form-label" style="margin-bottom:8px">Pilih Mata Pelajaran</div>
+        <div class="mapel-tabs" style="flex-wrap:wrap">
+          ${myMapel.map(m=>`<button class="mapel-tab ${selectedMapelSiswa===m.id?'active':''}" onclick="setSiswaMapel('${m.id}')">${m.nama}</button>`).join('')}
+        </div>
+      </div>
+      <div id="siswa-nilai-area"></div>`}`;
 
   if(myMapel.length>0)renderSiswaInputArea();
 }
@@ -1186,12 +1333,11 @@ function renderSiswaInputArea(){
   const dbKey=`${s.id}_${mapelId}`;
   const d=allNilai[dbKey]||{};
   const mapelNama=allMapel.find(m=>m.id===mapelId)?.nama||'';
-  const na=hitungNilaiAkhir(d);
 
   area.innerHTML=`
   <div class="siswa-input-card">
-    <h3>Input Nilai Raport — ${mapelNama}</h3>
-    <p style="font-size:12px;color:var(--text3);margin:-4px 0 14px">Ketik nilai raport tiap semester yang sudah selesai. Kolom kosong tidak dihitung. Tersimpan otomatis.</p>
+    <h3>${mapelNama}</h3>
+    <p style="font-size:12px;color:var(--text3);margin:4px 0 16px">Isikan nilai raport untuk setiap semester yang sudah selesai. Kosongkan semester yang belum ada nilainya. Tersimpan otomatis.</p>
     <div class="semester-grid">
       ${['s1','s2','s3','s4','s5'].map((f,i)=>`
       <div class="semester-box">
@@ -1199,17 +1345,16 @@ function renderSiswaInputArea(){
         <input type="number" inputmode="decimal" min="0" max="100" step="0.01"
           value="${d[f]!==undefined&&d[f]!==null?d[f]:''}"
           placeholder="-"
-          oninput="saveSiswaND('${dbKey}','${f}',this.value,'siswa-na-box-${mapelId}')"/>
+          oninput="saveSiswaND('${dbKey}','${f}',this.value)"/>
       </div>`).join('')}
     </div>
-    <div class="nilai-akhir-box" id="siswa-na-box-${mapelId}">
-      <div class="na-label">Nilai Akhir ${mapelNama}</div>
-      <div class="na-val">${na?na.toFixed(2):'-'}</div>
-    </div>
-    <p style="font-size:11px;color:var(--text3);margin-top:10px">* Nilai akhir = rata-rata raport (60%) + komponen ujian (40% diisi guru)</p>
+    <div id="siswa-save-indicator-${mapelId}" style="text-align:right;font-size:11px;color:var(--text3);margin-top:8px;min-height:16px"></div>
   </div>`;
 }
-function saveSiswaND(dbKey,field,val,naBoxId){
+function saveSiswaND(dbKey,field,val){
+  const mapelId=dbKey.split('_').slice(1).join('_');
+  const indEl=document.getElementById('siswa-save-indicator-'+mapelId);
+  if(indEl)indEl.innerHTML='<span style="color:var(--gold)">● Menyimpan...</span>';
   clearTimeout(debounceTimers['siswa_'+dbKey+'_'+field]);
   debounceTimers['siswa_'+dbKey+'_'+field]=setTimeout(()=>{
     const num=val.trim()!==''?parseFloat(val):null;
@@ -1218,21 +1363,10 @@ function saveSiswaND(dbKey,field,val,naBoxId){
     if(!allNilai[dbKey])allNilai[dbKey]={};
     if(num!==null&&!isNaN(num))allNilai[dbKey][field]=num;
     else delete allNilai[dbKey][field];
-    const na=hitungNilaiAkhir(allNilai[dbKey]);
-    const box=document.getElementById(naBoxId);
-    if(box){const vEl=box.querySelector('.na-val');if(vEl)vEl.textContent=na?na.toFixed(2):'-';}
-    // update rekap row
-    const idx=allMapel.findIndex(m=>dbKey.endsWith('_'+m.id));
-    updateRekapRow(idx,allNilai[dbKey]||{});
+    if(indEl)indEl.innerHTML='<span style="color:var(--em)">✓ Tersimpan</span>';
+    setTimeout(()=>{if(indEl)indEl.innerHTML='';},2000);
   },800);
 }
-function updateRekapRow(idx,d){
-  const tbody=document.getElementById('rekap-tbody');
-  if(!tbody||idx<0)return;
-  const row=tbody.rows[idx];if(!row)return;
-  const rv=['s1','s2','s3','s4','s5'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-  const kv=['usMapel','us4Mapel','praktik'].map(f=>d[f]).filter(x=>x!==undefined&&x!==null&&x!=='');
-  const rr=rv.length?(rv.reduce((a,b)=>a+parseFloat(b),0)/rv.length).toFixed(2):'-';
   const rk=kv.length?(kv.reduce((a,b)=>a+parseFloat(b),0)/kv.length).toFixed(2):'-';
   const na=hitungNilaiAkhir(d);
   row.cells[2].textContent=rr;row.cells[3].textContent=rk;
@@ -1290,12 +1424,18 @@ function cetakSKL(siswaId){
     </div>
   </div>
 
-  <!-- Edit nomor SKL (no print) -->
+  <!-- Edit bar: Nomor SKL + Nomor SK (no print) -->
   <div class="skl-edit-bar no-print">
     <label>Nomor SKL :</label>
-    <input id="inp-skl-nomor" value="${nomorSKL}" placeholder="Contoh: 421/SKL/MB/VI/2026/001"
+    <input id="inp-skl-nomor" value="${nomorSKL}" placeholder="421/SKL/MB/VI/2026/001"
       oninput="document.getElementById('skl-nomor-text').textContent=this.value||'...............................'"/>
-    <button class="btn btn-gold btn-sm" onclick="simpanNomorSKL('${siswaId}')">Simpan</button>
+    <button class="btn btn-gold btn-sm" onclick="simpanNomorSKL('${siswaId}')">Simpan SKL</button>
+  </div>
+  <div class="skl-edit-bar no-print" style="background:#e8f5ef;border-color:var(--em)">
+    <label style="color:var(--em2)">Nomor SK :</label>
+    <input id="inp-sk-nomor" value="${nomorSK}" placeholder="421/SK.68/MB/VI/2026"
+      oninput="document.getElementById('skl-sk-text').textContent=this.value||'..............................'"/>
+    <button class="btn btn-primary btn-sm" onclick="simpanNomorSK()">Simpan SK</button>
   </div>
 
   <!-- DOKUMEN SKL -->
@@ -1317,11 +1457,11 @@ function cetakSKL(siswaId){
     <!-- JUDUL -->
     <div class="skl-judul">SURAT KETERANGAN KELULUSAN</div>
 
-    <!-- NOMOR -->
+    <!-- NOMOR SKL -->
     <div class="skl-nomor">Nomor : <span id="skl-nomor-text">${nomorSKL||'...............................'}</span></div>
 
-    <!-- PARAGRAF DASAR -->
-    <p class="skl-paragraf">Berdasarkan Surat Keputusan Kepala Sekolah Nomor ${nomorSK} tanggal ${tglSKL} tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran ${tp}, menerangkan bahwa:</p>
+    <!-- PARAGRAF DASAR — nomor SK bisa diedit inline -->
+    <p class="skl-paragraf">Berdasarkan Surat Keputusan Kepala Sekolah Nomor <span id="skl-sk-text">${nomorSK}</span> tanggal ${tglSKL} tentang Penetapan Kelulusan Peserta Didik Tahun Pelajaran ${tp}, menerangkan bahwa:</p>
 
     <!-- BIODATA SISWA (indent, 3 baris) -->
     <table class="skl-biodata">
@@ -1352,9 +1492,10 @@ function cetakSKL(siswaId){
     <div class="skl-ttd-row">
       <div class="skl-ttd-box">
         <p class="ttd-kota">${kota}, &nbsp; ${tglSKL}</p>
-        <p class="ttd-jabatan">Kepala,</p>
+        <p class="ttd-jabatan">Kepala Sekolah SMP-IT Majma'ul Bahrain,</p>
         <div class="ttd-gap"></div>
-        <p class="ttd-nama">${kepsek}</p>
+        <p class="ttd-nama">Hj. Miya Fahmiyawati, S.Pd.I</p>
+        <p class="ttd-nuks">NUKS : 19023L072020523210788</p>
         ${nip?`<p class="ttd-nip">NIP. ${nip}</p>`:''}
       </div>
     </div>
@@ -1372,6 +1513,11 @@ function simpanNomorSKL(siswaId){
   pengaturan[key]=nomor;
   db.ref('/pengaturan/'+key).set(nomor).then(()=>toast('Nomor SKL disimpan'));
 }
+function simpanNomorSK(){
+  const nomor=document.getElementById('inp-sk-nomor')?.value||'';
+  pengaturan.nomorSK=nomor;
+  db.ref('/pengaturan/nomorSK').set(nomor).then(()=>toast('Nomor SK disimpan'));
+}
 
 // ═══ ICONS ═══
 function iDash(c='currentColor'){return`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`}
@@ -1383,6 +1529,8 @@ function iLegger(c='currentColor'){return`<svg width="18" height="18" viewBox="0
 function iSetting(c='currentColor'){return`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 4.93 19.07M4.93 4.93A10 10 0 0 1 19.07 19.07"/></svg>`}
 function iSKL(c='currentColor'){return`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`}
 function iPlus(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
+function iDown(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`}
+function iUp(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`}
 function iEdit(){return`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>`}
 function iTrash(){return`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`}
 function iPrint(){return`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`}
