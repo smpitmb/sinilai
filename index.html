@@ -23,8 +23,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 h1,h2,h3{font-family:'Playfair Display',serif}
 
 /* LOADING */
-#loading-screen{position:fixed;inset:0;background:var(--em3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s}
-#loading-screen.hide{opacity:0;pointer-events:none}
+#loading-screen{position:fixed;inset:0;background:var(--em3);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .4s}
+#loading-screen.hide{opacity:0;pointer-events:none;animation:none}
+#loading-screen.gone{display:none!important}
 .loader-logo{width:80px;height:80px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:24px;animation:pulse 1.8s infinite}
 .loader-logo svg{width:44px;height:44px;fill:#fff}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(201,168,76,.5)}70%{box-shadow:0 0 0 20px rgba(201,168,76,0)}100%{box-shadow:0 0 0 0 rgba(201,168,76,0)}}
@@ -461,20 +462,39 @@ let selectedKelasGuru='IX-1',selectedMapelGuru=null;
 let selectedMapelSiswa=null;
 
 // ═══ INIT ═══
-window.onload=async()=>{
+window.onload=()=>{
   updateDate();setInterval(updateDate,60000);
-  await loadPengaturan();applyPengaturan();
-  setTimeout(()=>{
-    document.getElementById('loading-screen').classList.add('hide');
-    document.getElementById('login-screen').classList.remove('hide');
-  },2400);
+  // Paksa loading screen hilang maks 5 detik
+  const hideLoading=()=>{
+    const ls=document.getElementById('loading-screen');
+    const login=document.getElementById('login-screen');
+    ls.classList.add('hide');
+    login.classList.remove('hide');
+    setTimeout(()=>ls.classList.add('gone'),500);
+  };
+  const fallback=setTimeout(hideLoading,5000);
+  // Coba load pengaturan, selesai dalam 2.4 detik atau pakai fallback
+  loadPengaturan()
+    .then(()=>applyPengaturan())
+    .catch(()=>{})
+    .finally(()=>{
+      clearTimeout(fallback);
+      setTimeout(hideLoading,400);
+    });
 };
 function updateDate(){
   const el=document.getElementById('header-date');
   if(el)el.textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 }
 async function loadPengaturan(){
-  return new Promise(r=>{db.ref('/pengaturan').once('value',s=>{pengaturan=s.val()||{};r();});});
+  return new Promise(r=>{
+    const t=setTimeout(()=>r(),4000); // fallback 4 detik
+    db.ref('/pengaturan').once('value',s=>{
+      clearTimeout(t);
+      pengaturan=s.val()||{};
+      r();
+    },()=>{clearTimeout(t);r();}); // onError juga resolve
+  });
 }
 function applyPengaturan(){
   if(pengaturan.logo){
