@@ -280,6 +280,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="fg"><label class="fl">Pilih Nama</label>
         <select class="fs" id="sklnm"><option value="">-- Pilih Nama --</option></select>
       </div>
+      <div class="fg"><label class="fl">Password</label>
+        <input class="fi" id="skpw" type="password" placeholder="Password siswa"/>
+      </div>
     </div>
     <button class="bsl" onclick="doLogin()">Masuk</button>
     <p style="text-align:center;font-size:11px;color:var(--text3);margin-top:14px">NPSN 20231079 · TP 2024/2025</p>
@@ -325,8 +328,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 var DB=null, curUser=null, curRole=null, loginRole='admin';
 var allUsers=[], allMapel=[], allSiswa=[], allNilai={}, peng={};
 var activeMenu=null, dbt={}, selKelasGuru='IX-1', selMapelGuru=null, selMapelSiswa=null;
-var _editSiswa=null, _editGuru=null, _editMapel=null;
-var _nilaiSaving=false, _nilaiSavingTimer=null;
 
 // ══════════════════════════════════════
 // LOADING — dijamin hilang dalam 2.5 detik
@@ -409,11 +410,15 @@ function doLogin(){
   if(loginRole==='siswa'){
     var kelas=document.getElementById('sklkls').value;
     var sid=document.getElementById('sklnm').value;
+    var spw=document.getElementById('skpw').value;
     if(!kelas||!sid){showErr('Pilih kelas dan nama');return;}
+    if(!spw){showErr('Masukkan password');return;}
     dbonce('/siswa',function(s){
       var arr=toArr(s.val());
       var found=arr.find(function(x){return x&&x.id===sid;});
       if(!found){showErr('Siswa tidak ditemukan');return;}
+      if(!found.password){showErr('Password belum diatur. Hubungi admin.');return;}
+      if(found.password!==spw){showErr('Password salah');return;}
       curUser=found;curRole='siswa';enterApp();
     });
     return;
@@ -454,6 +459,7 @@ function doLogout(){
   document.getElementById('LG').classList.remove('hide');
   document.getElementById('iun').value='';
   document.getElementById('ipw').value='';
+  document.getElementById('skpw').value='';
   setRole('admin');
 }
 
@@ -469,7 +475,6 @@ function loadData(){
   });
   dbon('/nilai',function(s){
     allNilai=s.val()||{};
-    if(_nilaiSaving) return;
     if(['nilai-guru','legger','nilai-kelulusan','nilai-siswa','dashboard'].indexOf(activeMenu)>=0) go(activeMenu);
   });
 }
@@ -666,13 +671,9 @@ function rSiswaList(){
   var q=(gv('srch')||'').toLowerCase(), kf=gv('fkls')||'';
   var list=allSiswa.filter(function(s){return(!q||s.nama.toLowerCase().includes(q)||(s.nis||'').includes(q))&&(!kf||s.kelas===kf);});
   var tb=document.getElementById('tbs');
-  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openSiswaModalById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
+  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
   var cv=document.getElementById('csv');
-  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' · '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openSiswaModalById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' · Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
-}
-function openSiswaModalById(id){
-  var s=id?allSiswa.find(function(x){return x.id===id;}):null;
-  openSiswaModal(s);
+  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' · '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' · Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
 }
 function openSiswaModal(s){
   var ie=!!s;
@@ -683,13 +684,16 @@ function openSiswaModal(s){
     '<div class="frow"><div class="fg"><label class="fl">Tempat Lahir</label><input class="fi" id="fttl" value="'+(s?s.tempatLahir||'':'')+'"/></div><div class="fg"><label class="fl">Tanggal Lahir</label><input class="fi" type="date" id="ftgl" value="'+(s?s.tanggalLahir||'':'')+'"/></div></div>'+
     '<div class="frow"><div class="fg"><label class="fl">JK</label><select class="fs" id="fjk"><option '+(s&&s.jk==='L'?'selected':'')+'>L</option><option '+(s&&s.jk==='P'?'selected':'')+'>P</option></select></div>'+
     '<div class="fg"><label class="fl">Kelas</label><select class="fs" id="fkls2"><option '+(s&&s.kelas==='IX-1'?'selected':'')+'>IX-1</option><option '+(s&&s.kelas==='IX-2'?'selected':'')+'>IX-2</option><option '+(s&&s.kelas==='IX-3'?'selected':'')+'>IX-3</option></select></div></div>'+
-    '<div class="fg"><label class="fl">Nama Orang Tua</label><input class="fi" id="fortu" value="'+(s?s.namaOrtu||'':'')+'"/></div>',
+    '<div class="fg"><label class="fl">Nama Orang Tua</label><input class="fi" id="fortu" value="'+(s?s.namaOrtu||'':'')+'"/></div>'+'<div class="frow"><div class="fg"><label class="fl">Password</label><input class="fi" type="password" id="fspw" placeholder="'+(s&&s.password?'Kosong = tidak berubah':'Buat password')+'" autocomplete="new-password"/></div></div>',
     [{lbl:'Batal',cls:'bot',fn:'closeMod()'},{lbl:ie?'Simpan':'Tambah',cls:'bpr',fn:'saveSiswa(\''+(s?s.id||'':'')+'\')'}]
   );
 }
 function saveSiswa(id){
   var d={nis:gv('fnis'),nisn:gv('fnisn'),nama:gv('fnama'),tempatLahir:gv('fttl'),tanggalLahir:gv('ftgl'),jk:gv('fjk'),kelas:gv('fkls2'),namaOrtu:gv('fortu')};
   if(!d.nama){toast('Nama wajib diisi','error');return;}
+  var spw=gv('fspw');
+  if(spw) d.password=spw;
+  else if(id){var existing=allSiswa.find(function(x){return x.id===id;});if(existing&&existing.password) d.password=existing.password;}
   var key=id||('siswa_'+Date.now());d.id=key;
   dbs('/siswa/'+key,d);
   toast(id?'Siswa diperbarui':'Siswa ditambahkan');closeMod();
@@ -745,16 +749,12 @@ function rMapel(){
     '<div class="tw dt-wrap"><div class="ts"><table class="dt"><thead><tr><th>No</th><th>Kode</th><th>Nama Mapel</th><th>Guru Pengampu</th><th>Aksi</th></tr></thead><tbody>'+
     allMapel.map(function(m,i){
       var gr=gurus.find(function(g){return(g.mapelIds||[]).indexOf(m.id)>=0;});
-      return '<tr><td>'+(i+1)+'</td><td><span class="badge bem">'+(m.kode||'-')+'</span></td><td><strong>'+m.nama+'</strong></td><td>'+(gr?gr.nama:'<span style="color:var(--text3)">Belum assign</span>')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openMapelModById(\''+m.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><span class="badge bem">'+(m.kode||'-')+'</span></td><td><strong>'+m.nama+'</strong></td><td>'+(gr?gr.nama:'<span style="color:var(--text3)">Belum assign</span>')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openMapelMod('+JSON.stringify(m)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></td></tr>';
     }).join('')+'</tbody></table></div></div>'+
     '<div class="cv">'+allMapel.map(function(m){
       var gr=gurus.find(function(g){return(g.mapelIds||[]).indexOf(m.id)>=0;});
-      return '<div class="sc"><div class="sch"><div class="sca" style="background:var(--gold-light);color:var(--gold2)">'+(m.kode?m.kode.charAt(0):'M')+'</div><div class="sci"><h4>'+m.nama+'</h4><p>Kode: '+(m.kode||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openMapelModById(\''+m.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">Guru: '+(gr?gr.nama:'Belum assign')+'</div></div>';
+      return '<div class="sc"><div class="sch"><div class="sca" style="background:var(--gold-light);color:var(--gold2)">'+(m.kode?m.kode.charAt(0):'M')+'</div><div class="sci"><h4>'+m.nama+'</h4><p>Kode: '+(m.kode||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openMapelMod('+JSON.stringify(m)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">Guru: '+(gr?gr.nama:'Belum assign')+'</div></div>';
     }).join('')+'</div>';
-}
-function openMapelModById(id){
-  var m=id?allMapel.find(function(x){return x.id===id;}):null;
-  openMapelMod(m);
 }
 function openMapelMod(m){
   var gurus=allUsers.filter(function(u){return u.role==='guru';});
@@ -791,16 +791,12 @@ function rGuru(){
     '<div class="tw dt-wrap"><div class="ts"><table class="dt"><thead><tr><th>No</th><th>Nama</th><th>Username</th><th>Mapel Diampu</th><th>Aksi</th></tr></thead><tbody>'+
     gurus.map(function(g,i){
       var md=(g.mapelIds||[]).map(function(mid){return allMapel.find(function(m){return m.id===mid;})||{};}).map(function(m){return m.nama||'';}).filter(Boolean);
-      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openGuruModById(\''+g.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
     }).join('')+'</tbody></table></div></div>'+
     '<div class="cv">'+gurus.map(function(g){
       var md=(g.mapelIds||[]).map(function(mid){return(allMapel.find(function(m){return m.id===mid;})||{}).nama||'';}).filter(Boolean);
-      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openGuruModById(\''+g.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
+      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
     }).join('')+'</div>';
-}
-function openGuruModById(id){
-  var g=id?allUsers.find(function(x){return x.id===id;}):null;
-  openGuruMod(g);
 }
 function openGuruMod(g){
   showMod(g?'Edit Guru':'Tambah Guru',
@@ -1013,8 +1009,6 @@ function rNTbl(){
 function togEP(id){var el=document.getElementById(id);if(el)el.classList.toggle('on');}
 function svN(sid,mid,field,val,naId,u4){
   var k=sid+'_'+mid;
-  _nilaiSaving=true;
-  clearTimeout(_nilaiSavingTimer);
   clearTimeout(dbt[k+'_'+field]);
   dbt[k+'_'+field]=setTimeout(function(){
     var num=val.trim()!==''?parseFloat(val):null;
@@ -1026,7 +1020,6 @@ function svN(sid,mid,field,val,naId,u4){
     var na=hitNA(allNilai[k],u4);
     var el=document.getElementById(naId);
     if(el) el.textContent=na?na.toFixed(window.innerWidth<=768?0:2):'-';
-    _nilaiSavingTimer=setTimeout(function(){_nilaiSaving=false;},2000);
   },800);
 }
 
@@ -1061,8 +1054,6 @@ function rSArea(){
     '</div><div id="sind-'+mid+'" style="text-align:right;font-size:11px;color:var(--text3);min-height:16px"></div></div>';
 }
 function svS(k,field,val,indId){
-  _nilaiSaving=true;
-  clearTimeout(_nilaiSavingTimer);
   clearTimeout(dbt['s_'+k+'_'+field]);
   var ind=document.getElementById(indId);
   if(ind) ind.innerHTML='<span style="color:var(--gold)">● Menyimpan...</span>';
@@ -1074,7 +1065,6 @@ function svS(k,field,val,indId){
     if(num!==null&&!isNaN(num)) allNilai[k][field]=num;
     else delete allNilai[k][field];
     if(ind){ind.innerHTML='<span style="color:var(--em)">✓ Tersimpan</span>';setTimeout(function(){if(ind)ind.innerHTML='';},2000);}
-    _nilaiSavingTimer=setTimeout(function(){_nilaiSaving=false;},2000);
   },800);
 }
 
