@@ -466,16 +466,17 @@ function doLogout(){
 // ══════════════════════════════════════
 // DATA
 // ══════════════════════════════════════
+function modOpen(){return !document.getElementById('MBG').classList.contains('hide');}
 function loadData(){
   dbon('/users',function(s){allUsers=toArr(s.val());});
   dbon('/mapel',function(s){allMapel=toArr(s.val());});
   dbon('/siswa',function(s){
     allSiswa=toArr(s.val());
-    if(['data-siswa','dashboard','nilai-kelulusan','legger','nilai-guru','nilai-siswa'].indexOf(activeMenu)>=0) go(activeMenu);
+    if(!modOpen()&&['data-siswa','dashboard','nilai-kelulusan','legger','nilai-guru','nilai-siswa'].indexOf(activeMenu)>=0) go(activeMenu);
   });
   dbon('/nilai',function(s){
     allNilai=s.val()||{};
-    if(['nilai-guru','legger','nilai-kelulusan','nilai-siswa','dashboard'].indexOf(activeMenu)>=0) go(activeMenu);
+    if(!modOpen()&&['nilai-guru','legger','nilai-kelulusan','nilai-siswa','dashboard'].indexOf(activeMenu)>=0) go(activeMenu);
   });
 }
 
@@ -667,24 +668,27 @@ function rSiswa(){
     '<div class="cv" id="csv"></div>';
   rSiswaList();
 }
+function editSiswaById(id){var s=allSiswa.find(function(x){return x.id===id;});if(s)openSiswaModal(s);}
 function rSiswaList(){
   var q=(gv('srch')||'').toLowerCase(), kf=gv('fkls')||'';
   var list=allSiswa.filter(function(s){return(!q||s.nama.toLowerCase().includes(q)||(s.nis||'').includes(q))&&(!kf||s.kelas===kf);});
   var tb=document.getElementById('tbs');
-  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
+  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="editSiswaById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
   var cv=document.getElementById('csv');
-  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' · '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' · Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
+  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' \xB7 '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="editSiswaById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' \xB7 Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
 }
 function openSiswaModal(s){
   var ie=!!s;
+  var esc=function(v){return (v||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
   showMod(ie?'Edit Siswa':'Tambah Siswa',
     (!ie?'<div style="background:var(--em-light);border:1.5px solid var(--em-mid);border-radius:var(--rsm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--em2)">💡 Import banyak siswa sekaligus? Gunakan tombol <strong>Import Excel</strong>.</div>':'')+
-    '<div class="frow"><div class="fg"><label class="fl">NIS</label><input class="fi" id="fnis" value="'+(s?s.nis||'':'')+'" placeholder="Nomor Induk Siswa"/></div><div class="fg"><label class="fl">NISN</label><input class="fi" id="fnisn" value="'+(s?s.nisn||'':'')+'" placeholder="10 digit NISN"/></div></div>'+
-    '<div class="fg"><label class="fl">Nama Lengkap</label><input class="fi" id="fnama" value="'+(s?s.nama||'':'')+'" placeholder="Nama lengkap"/></div>'+
-    '<div class="frow"><div class="fg"><label class="fl">Tempat Lahir</label><input class="fi" id="fttl" value="'+(s?s.tempatLahir||'':'')+'"/></div><div class="fg"><label class="fl">Tanggal Lahir</label><input class="fi" type="date" id="ftgl" value="'+(s?s.tanggalLahir||'':'')+'"/></div></div>'+
-    '<div class="frow"><div class="fg"><label class="fl">JK</label><select class="fs" id="fjk"><option '+(s&&s.jk==='L'?'selected':'')+'>L</option><option '+(s&&s.jk==='P'?'selected':'')+'>P</option></select></div>'+
-    '<div class="fg"><label class="fl">Kelas</label><select class="fs" id="fkls2"><option '+(s&&s.kelas==='IX-1'?'selected':'')+'>IX-1</option><option '+(s&&s.kelas==='IX-2'?'selected':'')+'>IX-2</option><option '+(s&&s.kelas==='IX-3'?'selected':'')+'>IX-3</option></select></div></div>'+
-    '<div class="fg"><label class="fl">Nama Orang Tua</label><input class="fi" id="fortu" value="'+(s?s.namaOrtu||'':'')+'"/></div>'+'<div class="frow"><div class="fg"><label class="fl">Password</label><input class="fi" type="password" id="fspw" placeholder="'+(s&&s.password?'Kosong = tidak berubah':'Buat password')+'" autocomplete="new-password"/></div></div>',
+    '<div class="frow"><div class="fg"><label class="fl">NIS</label><input class="fi" id="fnis" value="'+esc(s?s.nis:'')+'" placeholder="Nomor Induk Siswa"/></div><div class="fg"><label class="fl">NISN</label><input class="fi" id="fnisn" value="'+esc(s?s.nisn:'')+'" placeholder="10 digit NISN"/></div></div>'+
+    '<div class="fg"><label class="fl">Nama Lengkap</label><input class="fi" id="fnama" value="'+esc(s?s.nama:'')+'" placeholder="Nama lengkap"/></div>'+
+    '<div class="frow"><div class="fg"><label class="fl">Tempat Lahir</label><input class="fi" id="fttl" value="'+esc(s?s.tempatLahir:'')+'"/></div><div class="fg"><label class="fl">Tanggal Lahir</label><input class="fi" type="date" id="ftgl" value="'+esc(s?s.tanggalLahir:'')+'"/></div></div>'+
+    '<div class="frow"><div class="fg"><label class="fl">JK</label><select class="fs" id="fjk"><option value="L"'+(s&&s.jk==='L'?' selected':'')+'>L</option><option value="P"'+(s&&s.jk==='P'?' selected':'')+'>P</option></select></div>'+
+    '<div class="fg"><label class="fl">Kelas</label><select class="fs" id="fkls2"><option value="IX-1"'+(s&&s.kelas==='IX-1'?' selected':'')+'>IX-1</option><option value="IX-2"'+(s&&s.kelas==='IX-2'?' selected':'')+'>IX-2</option><option value="IX-3"'+(s&&s.kelas==='IX-3'?' selected':'')+'>IX-3</option></select></div></div>'+
+    '<div class="fg"><label class="fl">Nama Orang Tua</label><input class="fi" id="fortu" value="'+esc(s?s.namaOrtu:'')+'"/></div>'+
+    '<div class="frow"><div class="fg"><label class="fl">Password</label><input class="fi" type="password" id="fspw" placeholder="'+(s&&s.password?'Kosong = tidak berubah':'Buat password')+'" autocomplete="new-password"/></div></div>',
     [{lbl:'Batal',cls:'bot',fn:'closeMod()'},{lbl:ie?'Simpan':'Tambah',cls:'bpr',fn:'saveSiswa(\''+(s?s.id||'':'')+'\')'}]
   );
 }
@@ -694,11 +698,17 @@ function saveSiswa(id){
   var spw=gv('fspw');
   if(spw) d.password=spw;
   else if(id){var existing=allSiswa.find(function(x){return x.id===id;});if(existing&&existing.password) d.password=existing.password;}
+  // password opsional untuk siswa baru
   var key=id||('siswa_'+Date.now());d.id=key;
   dbs('/siswa/'+key,d);
-  toast(id?'Siswa diperbarui':'Siswa ditambahkan');closeMod();
+  toast(id?'Siswa diperbarui':'Siswa ditambahkan');
+  closeMod();
+  // update local array langsung agar list terupdate tanpa tunggu Firebase
+  var idx=allSiswa.findIndex(function(x){return x.id===key;});
+  if(idx>=0) allSiswa[idx]=d; else allSiswa.push(d);
+  if(activeMenu==='data-siswa') rSiswaList();
 }
-function hapusSiswa(id){if(!confirm('Hapus siswa ini?'))return;dbrm('/siswa/'+id);toast('Siswa dihapus');}
+function hapusSiswa(id){if(!confirm('Hapus siswa ini?'))return;dbrm('/siswa/'+id);allSiswa=allSiswa.filter(function(x){return x.id!==id;});toast('Siswa dihapus');if(activeMenu==='data-siswa')rSiswaList();}
 function hapusAllSiswa(){
   if(!confirm('PERINGATAN!\nHapus SEMUA '+allSiswa.length+' siswa?\nTidak dapat dibatalkan!')) return;
   var k=prompt('Ketik HAPUS SEMUA untuk konfirmasi:');
@@ -780,6 +790,7 @@ function hapusMapel(id){if(!confirm('Hapus mapel ini?'))return;dbrm('/mapel/'+id
 // ══════════════════════════════════════
 // DATA GURU
 // ══════════════════════════════════════
+function editGuruById(id){var g=allUsers.find(function(u){return u.id===id;});if(g)openGuruMod(g);}
 function rGuru(){
   var gurus=allUsers.filter(function(u){return u.role==='guru';});
   ct().innerHTML=
@@ -791,17 +802,18 @@ function rGuru(){
     '<div class="tw dt-wrap"><div class="ts"><table class="dt"><thead><tr><th>No</th><th>Nama</th><th>Username</th><th>Mapel Diampu</th><th>Aksi</th></tr></thead><tbody>'+
     gurus.map(function(g,i){
       var md=(g.mapelIds||[]).map(function(mid){return allMapel.find(function(m){return m.id===mid;})||{};}).map(function(m){return m.nama||'';}).filter(Boolean);
-      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="editGuruById('"+ g.id +"')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
     }).join('')+'</tbody></table></div></div>'+
     '<div class="cv">'+gurus.map(function(g){
       var md=(g.mapelIds||[]).map(function(mid){return(allMapel.find(function(m){return m.id===mid;})||{}).nama||'';}).filter(Boolean);
-      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
+      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="editGuruById('"+ g.id +"')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
     }).join('')+'</div>';
 }
 function openGuruMod(g){
+  var esc=function(v){return (v||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
   showMod(g?'Edit Guru':'Tambah Guru',
-    '<div class="fg"><label class="fl">Nama Lengkap</label><input class="fi" id="fgn" value="'+(g?g.nama||'':'')+'"/></div>'+
-    '<div class="frow"><div class="fg"><label class="fl">Username</label><input class="fi" id="fgu" value="'+(g?g.username||'':'')+'" autocomplete="off"/></div>'+
+    '<div class="fg"><label class="fl">Nama Lengkap</label><input class="fi" id="fgn" value="'+esc(g?g.nama:'')+'"/></div>'+
+    '<div class="frow"><div class="fg"><label class="fl">Username</label><input class="fi" id="fgu" value="'+esc(g?g.username:'')+'" autocomplete="off"/></div>'+
     '<div class="fg"><label class="fl">Password</label><input class="fi" type="password" id="fgp" placeholder="'+(g?'Kosong = tidak berubah':'Isi password')+'"/></div></div>'+
     '<div class="fg"><label class="fl">Mapel Diampu</label><div class="cbgroup" id="cbm">'+
     allMapel.map(function(m){return '<label class="cbi"><input type="checkbox" value="'+m.id+'"'+((g&&g.mapelIds&&g.mapelIds.indexOf(m.id)>=0)?' checked':'')+'/> '+m.nama+'</label>';}).join('')+
@@ -818,10 +830,15 @@ function saveGuru(id){
   var key=id||('guru_'+Date.now());
   var d={id:key,nama:nm,username:un,mapelIds:mids,role:'guru'};
   if(pw) d.password=pw;
+  else if(id){var existing=allUsers.find(function(u){return u.id===id;});if(existing&&existing.password) d.password=existing.password;}
   dbs('/users/'+key,d);
-  toast(id?'Guru diperbarui':'Guru ditambahkan');closeMod();
+  toast(id?'Guru diperbarui':'Guru ditambahkan');
+  closeMod();
+  var idx=allUsers.findIndex(function(x){return x.id===key;});
+  if(idx>=0) allUsers[idx]=d; else allUsers.push(d);
+  if(activeMenu==='data-guru') rGuru();
 }
-function hapusGuru(id){if(!confirm('Hapus guru ini?'))return;dbrm('/users/'+id);toast('Guru dihapus');}
+function hapusGuru(id){if(!confirm('Hapus guru ini?'))return;dbrm('/users/'+id);allUsers=allUsers.filter(function(x){return x.id!==id;});toast('Guru dihapus');if(activeMenu==='data-guru')rGuru();}
 function dlTplGuru(){
   if(!window.XLSX){toast('Library Excel belum siap','error');return;}
   var ref=allMapel.length?allMapel.map(function(m){return m.nama;}).join(', '):'(belum ada mapel)';
