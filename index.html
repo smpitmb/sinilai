@@ -185,7 +185,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .ltbl tr:nth-child(even) td{background:#f9fafb}
 .ltbl .cn{text-align:left;font-weight:600}
 /* SKL */
-@media print{@page{size:A4 portrait;margin:0}#SB,#HD,#TC,.nopr,#BN{display:none!important}#MN{margin:0!important}#CT{padding:0!important;overflow:visible!important;height:auto!important}body{background:#fff;overflow:visible!important}.skldoc{box-shadow:none!important;border-radius:0!important;padding:12mm 18mm 14mm 22mm!important;max-width:none!important;width:100%!important;page-break-inside:avoid!important;font-size:11pt!important;line-height:1.5!important}.skl-tb{font-size:10pt!important}.skl-pg,.skl-ly,.skl-ri,.skl-pe{font-size:11pt!important}.skl-jd{font-size:13pt!important}.skl-ks{font-size:14pt!important}.skl-ky{font-size:12pt!important}.ttdg{height:54px!important}.skl-tr{margin-top:16px!important}.skl-nm{margin-bottom:12px!important}}
+@media print{#SB,#HD,#TC,.nopr,#BN{display:none!important}#MN{margin:0!important}#CT{padding:0!important}body{background:#fff}.skldoc{box-shadow:none!important;border-radius:0!important;padding:15mm 20mm 20mm 25mm!important;max-width:none!important}}
 .skldoc{background:#fff;padding:24px 50px 36px;font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.6;box-shadow:var(--shadow-lg);border-radius:var(--radius);max-width:794px;margin:0 auto}
 .skl-kw{margin-bottom:0}.skl-ki{width:100%;display:block}
 .skl-kf{display:flex;align-items:center;gap:16px;padding-bottom:10px}
@@ -325,6 +325,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 var DB=null, curUser=null, curRole=null, loginRole='admin';
 var allUsers=[], allMapel=[], allSiswa=[], allNilai={}, peng={};
 var activeMenu=null, dbt={}, selKelasGuru='IX-1', selMapelGuru=null, selMapelSiswa=null;
+var _editSiswa=null, _editGuru=null, _editMapel=null;
 
 // ══════════════════════════════════════
 // LOADING — dijamin hilang dalam 2.5 detik
@@ -663,9 +664,13 @@ function rSiswaList(){
   var q=(gv('srch')||'').toLowerCase(), kf=gv('fkls')||'';
   var list=allSiswa.filter(function(s){return(!q||s.nama.toLowerCase().includes(q)||(s.nis||'').includes(q))&&(!kf||s.kelas===kf);});
   var tb=document.getElementById('tbs');
-  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
+  if(tb) tb.innerHTML=list.map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td>'+(s.nisn||'-')+'</td><td><strong>'+s.nama+'</strong></td><td>'+(s.jk||'-')+'</td><td><span class="kc">'+s.kelas+'</span></td><td>'+(s.namaOrtu||'-')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openSiswaModalById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></td></tr>';}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Belum ada data</td></tr>';
   var cv=document.getElementById('csv');
-  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' · '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openSiswaModal('+JSON.stringify(s)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' · Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
+  if(cv) cv.innerHTML=list.map(function(s){return '<div class="sc"><div class="sch"><div class="sca">'+s.nama.charAt(0)+'</div><div class="sci"><h4>'+s.nama+'</h4><p>NIS: '+(s.nis||'-')+' · '+s.kelas+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openSiswaModalById(\''+s.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusSiswa(\''+s.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">NISN: '+(s.nisn||'-')+' · Orang Tua: '+(s.namaOrtu||'-')+'</div></div>';}).join('')||'<div style="text-align:center;color:var(--text3);padding:40px">Belum ada data</div>';
+}
+function openSiswaModalById(id){
+  var s=id?allSiswa.find(function(x){return x.id===id;}):null;
+  openSiswaModal(s);
 }
 function openSiswaModal(s){
   var ie=!!s;
@@ -738,12 +743,16 @@ function rMapel(){
     '<div class="tw dt-wrap"><div class="ts"><table class="dt"><thead><tr><th>No</th><th>Kode</th><th>Nama Mapel</th><th>Guru Pengampu</th><th>Aksi</th></tr></thead><tbody>'+
     allMapel.map(function(m,i){
       var gr=gurus.find(function(g){return(g.mapelIds||[]).indexOf(m.id)>=0;});
-      return '<tr><td>'+(i+1)+'</td><td><span class="badge bem">'+(m.kode||'-')+'</span></td><td><strong>'+m.nama+'</strong></td><td>'+(gr?gr.nama:'<span style="color:var(--text3)">Belum assign</span>')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openMapelMod('+JSON.stringify(m)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><span class="badge bem">'+(m.kode||'-')+'</span></td><td><strong>'+m.nama+'</strong></td><td>'+(gr?gr.nama:'<span style="color:var(--text3)">Belum assign</span>')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openMapelModById(\''+m.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></td></tr>';
     }).join('')+'</tbody></table></div></div>'+
     '<div class="cv">'+allMapel.map(function(m){
       var gr=gurus.find(function(g){return(g.mapelIds||[]).indexOf(m.id)>=0;});
-      return '<div class="sc"><div class="sch"><div class="sca" style="background:var(--gold-light);color:var(--gold2)">'+(m.kode?m.kode.charAt(0):'M')+'</div><div class="sci"><h4>'+m.nama+'</h4><p>Kode: '+(m.kode||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openMapelMod('+JSON.stringify(m)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">Guru: '+(gr?gr.nama:'Belum assign')+'</div></div>';
+      return '<div class="sc"><div class="sch"><div class="sca" style="background:var(--gold-light);color:var(--gold2)">'+(m.kode?m.kode.charAt(0):'M')+'</div><div class="sci"><h4>'+m.nama+'</h4><p>Kode: '+(m.kode||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openMapelModById(\''+m.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusMapel(\''+m.id+'\')">'+iTrash+'</button></div></div><div style="font-size:12px;color:var(--text3)">Guru: '+(gr?gr.nama:'Belum assign')+'</div></div>';
     }).join('')+'</div>';
+}
+function openMapelModById(id){
+  var m=id?allMapel.find(function(x){return x.id===id;}):null;
+  openMapelMod(m);
 }
 function openMapelMod(m){
   var gurus=allUsers.filter(function(u){return u.role==='guru';});
@@ -780,12 +789,16 @@ function rGuru(){
     '<div class="tw dt-wrap"><div class="ts"><table class="dt"><thead><tr><th>No</th><th>Nama</th><th>Username</th><th>Mapel Diampu</th><th>Aksi</th></tr></thead><tbody>'+
     gurus.map(function(g,i){
       var md=(g.mapelIds||[]).map(function(mid){return allMapel.find(function(m){return m.id===mid;})||{};}).map(function(m){return m.nama||'';}).filter(Boolean);
-      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td><strong>'+g.nama+'</strong></td><td>'+(g.username||'-')+'</td><td>'+md.map(function(m){return '<span class="badge bgl" style="margin:1px">'+m+'</span>';}).join('')+'</td><td><div class="acts"><button class="btn bot bsm bnicon" onclick="openGuruModById(\''+g.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></td></tr>';
     }).join('')+'</tbody></table></div></div>'+
     '<div class="cv">'+gurus.map(function(g){
       var md=(g.mapelIds||[]).map(function(mid){return(allMapel.find(function(m){return m.id===mid;})||{}).nama||'';}).filter(Boolean);
-      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openGuruMod('+JSON.stringify(g)+')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
+      return '<div class="sc"><div class="sch"><div class="sca" style="background:#eff6ff;color:#3b82f6">'+g.nama.charAt(0)+'</div><div class="sci"><h4>'+g.nama+'</h4><p>'+(g.username||'-')+'</p></div><div style="margin-left:auto;display:flex;gap:6px"><button class="btn bot bsm bnicon" onclick="openGuruModById(\''+g.id+'\')">'+iEdit+'</button><button class="btn bdn bsm bnicon" onclick="hapusGuru(\''+g.id+'\')">'+iTrash+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+md.map(function(m){return '<span class="badge bgl">'+m+'</span>';}).join('')+'</div></div>';
     }).join('')+'</div>';
+}
+function openGuruModById(id){
+  var g=id?allUsers.find(function(x){return x.id===id;}):null;
+  openGuruMod(g);
 }
 function openGuruMod(g){
   showMod(g?'Edit Guru':'Tambah Guru',
