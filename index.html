@@ -332,13 +332,17 @@ var activeMenu=null, dbt={}, selKelasGuru='IX-1', selMapelGuru=null, selMapelSis
 // ══════════════════════════════════════
 // LOADING — dijamin hilang dalam 2.5 detik
 // ══════════════════════════════════════
-setTimeout(function(){
+function showLogin(){
   var ls=document.getElementById('LS');
   var lg=document.getElementById('LG');
-  ls.classList.add('out');
-  lg.classList.remove('hide');
-  setTimeout(function(){ls.style.display='none';},500);
-}, 2500);
+  if(lg.classList.contains('hide')){
+    ls.classList.add('out');
+    lg.classList.remove('hide');
+    setTimeout(function(){ls.style.display='none';},500);
+  }
+}
+// Paksa tampil login maksimal 2.5 detik — tidak peduli Firebase
+setTimeout(showLogin, 2500);
 
 // ══════════════════════════════════════
 // FIREBASE — dimuat setelah halaman siap
@@ -350,12 +354,18 @@ function initFirebase(){
       databaseURL:"https://sinilai-majmaulbahrain-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId:"sinilai-majmaulbahrain"
     };
-    if(typeof firebase==='undefined'){console.warn('Firebase SDK belum dimuat');return;}
+    if(typeof firebase==='undefined'){
+      console.warn('Firebase SDK belum dimuat — tampilkan login offline');
+      showLogin();return;
+    }
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     DB=firebase.database();
     console.log('Firebase OK');
     loadPeng();
-  }catch(e){console.warn('Firebase error:',e);}
+  }catch(e){
+    console.warn('Firebase error:',e);
+    showLogin();
+  }
 }
 
 function dbr(path){if(!DB)return null;try{return DB.ref(path);}catch(e){return null;}}
@@ -366,9 +376,14 @@ function dbon(path,cb){var r=dbr(path);if(r)r.on('value',cb);}
 function dbonce(path,cb){var r=dbr(path);if(r)r.once('value',cb,function(){cb({val:function(){return null;}});});else cb({val:function(){return null;}});}
 
 function loadPeng(){
+  // Timeout fallback: jika Firebase tidak merespons dalam 3 detik, tetap tampilkan login
+  var pgDone=false;
+  var pgTimer=setTimeout(function(){if(!pgDone){pgDone=true;showLogin();}},3000);
   dbonce('/pengaturan',function(s){
+    if(!pgDone){pgDone=true;clearTimeout(pgTimer);}
     peng=s.val()||{};
     applyPeng();
+    showLogin();
   });
 }
 function applyPeng(){
