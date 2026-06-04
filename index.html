@@ -326,6 +326,7 @@ var DB=null, curUser=null, curRole=null, loginRole='admin';
 var allUsers=[], allMapel=[], allSiswa=[], allNilai={}, peng={};
 var activeMenu=null, dbt={}, selKelasGuru='IX-1', selMapelGuru=null, selMapelSiswa=null;
 var _editSiswa=null, _editGuru=null, _editMapel=null;
+var _nilaiSaving=false, _nilaiSavingTimer=null;
 
 // ══════════════════════════════════════
 // LOADING — dijamin hilang dalam 2.5 detik
@@ -468,6 +469,7 @@ function loadData(){
   });
   dbon('/nilai',function(s){
     allNilai=s.val()||{};
+    if(_nilaiSaving) return;
     if(['nilai-guru','legger','nilai-kelulusan','nilai-siswa','dashboard'].indexOf(activeMenu)>=0) go(activeMenu);
   });
 }
@@ -1011,6 +1013,8 @@ function rNTbl(){
 function togEP(id){var el=document.getElementById(id);if(el)el.classList.toggle('on');}
 function svN(sid,mid,field,val,naId,u4){
   var k=sid+'_'+mid;
+  _nilaiSaving=true;
+  clearTimeout(_nilaiSavingTimer);
   clearTimeout(dbt[k+'_'+field]);
   dbt[k+'_'+field]=setTimeout(function(){
     var num=val.trim()!==''?parseFloat(val):null;
@@ -1022,6 +1026,7 @@ function svN(sid,mid,field,val,naId,u4){
     var na=hitNA(allNilai[k],u4);
     var el=document.getElementById(naId);
     if(el) el.textContent=na?na.toFixed(window.innerWidth<=768?0:2):'-';
+    _nilaiSavingTimer=setTimeout(function(){_nilaiSaving=false;},2000);
   },800);
 }
 
@@ -1056,6 +1061,8 @@ function rSArea(){
     '</div><div id="sind-'+mid+'" style="text-align:right;font-size:11px;color:var(--text3);min-height:16px"></div></div>';
 }
 function svS(k,field,val,indId){
+  _nilaiSaving=true;
+  clearTimeout(_nilaiSavingTimer);
   clearTimeout(dbt['s_'+k+'_'+field]);
   var ind=document.getElementById(indId);
   if(ind) ind.innerHTML='<span style="color:var(--gold)">● Menyimpan...</span>';
@@ -1067,6 +1074,7 @@ function svS(k,field,val,indId){
     if(num!==null&&!isNaN(num)) allNilai[k][field]=num;
     else delete allNilai[k][field];
     if(ind){ind.innerHTML='<span style="color:var(--em)">✓ Tersimpan</span>';setTimeout(function(){if(ind)ind.innerHTML='';},2000);}
+    _nilaiSavingTimer=setTimeout(function(){_nilaiSaving=false;},2000);
   },800);
 }
 
