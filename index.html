@@ -165,6 +165,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .nitbl td.fin{background:#fffdf5!important;font-weight:700;color:var(--em)}
 .ni{width:58px;padding:5px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:center;font-family:inherit;outline:none;transition:.2s;background:#fff}
 .ni:focus{border-color:var(--em);box-shadow:0 0 0 2px rgba(26,107,74,.1)}
+/* IMPORT NILAI */
+.imp-bar{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.imp-bar .imp-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-right:4px}
+.imp-info{flex:1;font-size:12px;color:var(--text3);min-width:180px}
+.imp-prog{background:var(--em-light);border:1px solid var(--em-mid);border-radius:var(--rsm);padding:12px 16px;margin-bottom:14px;display:none}
+.imp-prog.on{display:block}
+.imp-res{font-size:13px;color:var(--em2);font-weight:600}
+.imp-res span{color:var(--text3);font-weight:400}
 /* EXPAND PANEL */
 .ep{background:var(--em-light);border-radius:var(--rsm);padding:14px;margin-top:10px;display:none}
 .ep.on{display:block}
@@ -1012,9 +1020,99 @@ function rNilaiGuru(){
   if(!myMapel.length){html+='<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Belum ada mata pelajaran yang diampu</div>';ct().innerHTML=html;return;}
   html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Mata Pelajaran</div>'+
     '<div class="mtabs">'+myMapel.map(function(m){return '<button class="mtab'+(selMapelGuru===m.id?' on':'')+'" onclick="setMG(\''+m.id+'\')">'+m.nama+'</button>';}).join('')+'</div>';
+  html+='<div class="imp-bar">'+
+    '<span class="imp-label">'+iUp+' Import Nilai</span>'+
+    '<button class="btn bot bsm" onclick="dlTplNilai()">'+iDown+' Unduh Template</button>'+
+    '<label class="btn bpr bsm" style="cursor:pointer">'+iUp+' Import Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="impNilai(this)"/></label>'+
+    '<span class="imp-info">Hanya mengisi kolom nilai yang <strong>kosong</strong> — nilai yang sudah ada tidak akan tertimpa.</span>'+
+    '</div>'+
+    '<div class="imp-prog" id="imp-prog"><div class="imp-res" id="imp-res"></div></div>';
   html+='<div id="narea"></div>';
   ct().innerHTML=html;
   rNTbl();
+}
+function dlTplNilai(){
+  if(!window.XLSX){toast('Library Excel belum siap','error');return;}
+  var mapelObj=allMapel.find(function(m){return m.id===selMapelGuru;})||{};
+  var u4=isU4(selMapelGuru);
+  var flds=['s1','s2','s3','s4','s5','usMapel'].concat(u4?['us4Mapel']:[]).concat(['praktik']);
+  var hlbls=['S1','S2','S3','S4','S5','US Mapel'].concat(u4?['US 4 Mapel']:[]).concat(['Praktik']);
+  var sl=allSiswa.filter(function(s){return s.kelas===selKelasGuru;}).sort(function(a,b){return a.nama.localeCompare(b.nama);});
+  var header=['NIS','Nama Siswa'].concat(hlbls);
+  var rows=[header];
+  sl.forEach(function(s){
+    var d=allNilai[s.id+'_'+selMapelGuru]||{};
+    var row=[(s.nis||''),s.nama];
+    flds.forEach(function(f){row.push(d[f]!==undefined&&d[f]!==null?d[f]:'');});
+    rows.push(row);
+  });
+  rows.push([]);
+  rows.push(['KETERANGAN: Isi hanya kolom nilai yang kosong. Nilai yang sudah terisi tidak akan tertimpa saat import.']);
+  rows.push(['Kolom NIS dan Nama Siswa digunakan untuk mencocokkan data. Jangan diubah.']);
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:28}].concat(flds.map(function(){return {wch:10};}));
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Nilai');
+  var fname='template_nilai_'+(mapelObj.kode||mapelObj.nama||'mapel').replace(/\s+/g,'_')+'_'+selKelasGuru+'.xlsx';
+  XLSX.writeFile(wb,fname);
+  toast('Template diunduh: '+fname);
+}
+function impNilai(inp){
+  var file=inp.files[0];if(!file)return;
+  if(!window.XLSX){toast('Library Excel belum siap','error');return;}
+  var prog=document.getElementById('imp-prog');
+  var res=document.getElementById('imp-res');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'binary'});
+      var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      if(rows.length<2){toast('File kosong atau format tidak sesuai','error');return;}
+      var headerRow=rows[0];
+      var u4=isU4(selMapelGuru);
+      var flds=['s1','s2','s3','s4','s5','usMapel'].concat(u4?['us4Mapel']:[]).concat(['praktik']);
+      var hlbls=['S1','S2','S3','S4','S5','US Mapel'].concat(u4?['US 4 Mapel']:[]).concat(['Praktik']);
+      var colMap=[];
+      for(var ci=2;ci<headerRow.length;ci++){
+        var hdr=(headerRow[ci]||'').toString().trim();
+        var fi=hlbls.indexOf(hdr);
+        if(fi>=0) colMap.push({col:ci,field:flds[fi]});
+      }
+      if(!colMap.length){toast('Header kolom nilai tidak ditemukan. Gunakan template yang benar.','error');return;}
+      var cntFill=0,cntSkip=0,cntNoMatch=0;
+      rows.slice(1).forEach(function(r){
+        var nisCell=(r[0]||'').toString().trim();
+        var namaCell=(r[1]||'').toString().trim();
+        if(!nisCell&&!namaCell) return;
+        if(namaCell.indexOf('KETERANGAN')===0||namaCell.indexOf('Kolom')===0) return;
+        var siswa=null;
+        if(nisCell) siswa=allSiswa.find(function(s){return(s.nis||'').toString().trim()===nisCell&&s.kelas===selKelasGuru;});
+        if(!siswa&&namaCell) siswa=allSiswa.find(function(s){return s.nama.trim().toLowerCase()===namaCell.toLowerCase()&&s.kelas===selKelasGuru;});
+        if(!siswa){cntNoMatch++;return;}
+        var k=siswa.id+'_'+selMapelGuru;
+        if(!allNilai[k]) allNilai[k]={};
+        colMap.forEach(function(cm){
+          var raw=r[cm.col];
+          var valStr=(raw===undefined||raw===null)?'':raw.toString().trim();
+          if(valStr==='') return;
+          var num=parseFloat(valStr);
+          if(isNaN(num)) return;
+          if(allNilai[k][cm.field]!==undefined&&allNilai[k][cm.field]!==null&&allNilai[k][cm.field]!==''){cntSkip++;return;}
+          allNilai[k][cm.field]=num;
+          dbs('/nilai/'+k+'/'+cm.field,num);
+          cntFill++;
+        });
+      });
+      if(prog&&res){
+        prog.classList.add('on');
+        res.innerHTML='✅ Berhasil: <strong>'+cntFill+' nilai</strong> diisi &nbsp;|&nbsp; <span>'+cntSkip+' nilai dilewati (sudah ada)</span> &nbsp;|&nbsp; <span>'+cntNoMatch+' baris tidak cocok</span>';
+      }
+      toast(cntFill+' nilai diimport, '+cntSkip+' dilewati');
+      inp.value='';
+      rNTbl();
+    }catch(err){toast('Gagal baca file: '+err.message,'error');console.error(err);}
+  };
+  reader.readAsBinaryString(file);
 }
 function setKG(k){selKelasGuru=k;rNilaiGuru();}
 function setMG(id){selMapelGuru=id;rNilaiGuru();}
