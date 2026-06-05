@@ -165,14 +165,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .nitbl td.fin{background:#fffdf5!important;font-weight:700;color:var(--em)}
 .ni{width:58px;padding:5px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:center;font-family:inherit;outline:none;transition:.2s;background:#fff}
 .ni:focus{border-color:var(--em);box-shadow:0 0 0 2px rgba(26,107,74,.1)}
-/* IMPORT NILAI */
-.imp-bar{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:var(--shadow)}
-.imp-bar .imp-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-right:4px}
-.imp-info{flex:1;font-size:12px;color:var(--text3);min-width:180px}
-.imp-prog{background:var(--em-light);border:1px solid var(--em-mid);border-radius:var(--rsm);padding:12px 16px;margin-bottom:14px;display:none}
-.imp-prog.on{display:block}
-.imp-res{font-size:13px;color:var(--em2);font-weight:600}
-.imp-res span{color:var(--text3);font-weight:400}
 /* EXPAND PANEL */
 .ep{background:var(--em-light);border-radius:var(--rsm);padding:14px;margin-top:10px;display:none}
 .ep.on{display:block}
@@ -950,7 +942,39 @@ function rPengaturan(){
     '<div class="pgcard"><h3>Ganti Password Admin</h3>'+
     '<div class="fg"><label class="fl">Password Baru</label><input class="fi" type="password" id="ppb"/></div>'+
     '<div class="fg"><label class="fl">Konfirmasi</label><input class="fi" type="password" id="ppk"/></div>'+
-    '<button class="btn bpr" onclick="gantiPass()">Ganti Password</button></div>';
+    '<button class="btn bpr" onclick="gantiPass()">Ganti Password</button></div>'+
+    // ── Kartu Nomor SK & SKL ──
+    '<div class="pgcard"><h3>Nomor SK &amp; SKL</h3>'+
+    '<p style="font-size:12px;color:var(--text3);margin:-4px 0 16px">Isi sekali, berlaku untuk semua cetak SKL.</p>'+
+    '<div class="fg"><label class="fl">Nomor SK Kepala Sekolah</label><input class="fi" id="psk" value="'+(peng.nomorSK||'')+'" placeholder="421/SK.68/MB/VI/2026"/></div>'+
+    '<button class="btn bpr" style="margin-bottom:20px" onclick="simpanNomorSK()">Simpan Nomor SK</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:0 0 20px"/>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--text)">Nomor SKL per Siswa</span>'+
+    '<button class="btn bot bsm" onclick="rPengaturan()" title="Refresh">↺ Refresh</button></div>'+
+    (allSiswa.length===0?'<p style="font-size:12px;color:var(--text3)">Belum ada data siswa.</p>':
+    '<div style="overflow-x:auto"><table class="dt" style="font-size:12.5px"><thead><tr><th>No</th><th>NIS</th><th>Nama Siswa</th><th>Kelas</th><th>Nomor SKL</th><th>Aksi</th></tr></thead><tbody>'+
+    allSiswa.slice().sort(function(a,b){return(a.kelas||'').localeCompare(b.kelas||'')||a.nama.localeCompare(b.nama);}).map(function(s,i){
+      var nsk=peng['nomorSKL_'+s.id]||'';
+      return '<tr><td>'+(i+1)+'</td><td>'+(s.nis||'-')+'</td><td><strong>'+s.nama+'</strong></td><td><span class="kc">'+s.kelas+'</span></td>'+
+        '<td><input class="fi" id="skl-'+s.id+'" value="'+nsk+'" placeholder="421/SKL/MB/VI/2026/..." style="margin-top:0;padding:7px 10px;font-size:12.5px;min-width:200px"/></td>'+
+        '<td><button class="btn bgo bsm" onclick="simpanNomorSKL(\''+s.id+'\')">Simpan</button></td></tr>';
+    }).join('')+
+    '</tbody></table></div>')+
+    '</div>';
+}
+function simpanNomorSK(){
+  var n=gv('psk');
+  peng.nomorSK=n;
+  dbs('/pengaturan/nomorSK',n);
+  toast('Nomor SK disimpan');
+}
+function simpanNomorSKL(sid){
+  var el=document.getElementById('skl-'+sid);
+  if(!el)return;
+  var n=el.value.trim();
+  peng['nomorSKL_'+sid]=n;
+  dbs('/pengaturan/nomorSKL_'+sid,n);
+  toast('Nomor SKL '+((allSiswa.find(function(s){return s.id===sid;})||{}).nama||sid)+' disimpan');
 }
 function upFile(key,inp){
   var file=inp.files[0];if(!file)return;
@@ -988,120 +1012,9 @@ function rNilaiGuru(){
   if(!myMapel.length){html+='<div style="text-align:center;color:var(--text3);padding:40px;background:#fff;border-radius:var(--radius)">Belum ada mata pelajaran yang diampu</div>';ct().innerHTML=html;return;}
   html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Mata Pelajaran</div>'+
     '<div class="mtabs">'+myMapel.map(function(m){return '<button class="mtab'+(selMapelGuru===m.id?' on':'')+'" onclick="setMG(\''+m.id+'\')">'+m.nama+'</button>';}).join('')+'</div>';
-  // Baris import nilai
-  html+='<div class="imp-bar">'+
-    '<span class="imp-label">'+iUp+' Import Nilai</span>'+
-    '<button class="btn bot bsm" onclick="dlTplNilai()">'+iDown+' Unduh Template</button>'+
-    '<label class="btn bpr bsm" style="cursor:pointer">'+iUp+' Import Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="impNilai(this)"/></label>'+
-    '<span class="imp-info">Hanya mengisi kolom nilai yang <strong>kosong</strong> — nilai yang sudah ada tidak akan tertimpa.</span>'+
-    '</div>'+
-    '<div class="imp-prog" id="imp-prog"><div class="imp-res" id="imp-res"></div></div>';
   html+='<div id="narea"></div>';
   ct().innerHTML=html;
   rNTbl();
-}
-
-// Download template nilai untuk mata pelajaran & kelas aktif
-function dlTplNilai(){
-  if(!window.XLSX){toast('Library Excel belum siap','error');return;}
-  var mapelObj=allMapel.find(function(m){return m.id===selMapelGuru;})||{};
-  var u4=isU4(selMapelGuru);
-  var flds=['s1','s2','s3','s4','s5','usMapel'].concat(u4?['us4Mapel']:[]).concat(['praktik']);
-  var hlbls=['S1','S2','S3','S4','S5','US Mapel'].concat(u4?['US 4 Mapel']:[]).concat(['Praktik']);
-  var sl=allSiswa.filter(function(s){return s.kelas===selKelasGuru;}).sort(function(a,b){return a.nama.localeCompare(b.nama);});
-  var header=['NIS','Nama Siswa'].concat(hlbls);
-  var rows=[header];
-  sl.forEach(function(s){
-    var d=allNilai[s.id+'_'+selMapelGuru]||{};
-    var row=[(s.nis||''),s.nama];
-    flds.forEach(function(f){
-      row.push(d[f]!==undefined&&d[f]!==null?d[f]:'');
-    });
-    rows.push(row);
-  });
-  // Baris keterangan
-  rows.push([]);
-  rows.push(['KETERANGAN: Isi hanya kolom nilai yang kosong. Nilai yang sudah terisi tidak akan tertimpa saat import.']);
-  rows.push(['Kolom NIS dan Nama Siswa digunakan untuk mencocokkan data. Jangan diubah.']);
-  var ws=XLSX.utils.aoa_to_sheet(rows);
-  // Warna header
-  var wscols=[{wch:10},{wch:28}].concat(flds.map(function(){return {wch:10};}));
-  ws['!cols']=wscols;
-  var wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Nilai');
-  var fname='template_nilai_'+(mapelObj.kode||mapelObj.nama||'mapel').replace(/\s+/g,'_')+'_'+selKelasGuru+'.xlsx';
-  XLSX.writeFile(wb,fname);
-  toast('Template diunduh: '+fname);
-}
-
-// Import nilai dari Excel — hanya isi kolom yang kosong
-function impNilai(inp){
-  var file=inp.files[0];if(!file)return;
-  if(!window.XLSX){toast('Library Excel belum siap','error');return;}
-  var prog=document.getElementById('imp-prog');
-  var res=document.getElementById('imp-res');
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var wb=XLSX.read(e.target.result,{type:'binary'});
-      var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
-      if(rows.length<2){toast('File kosong atau format tidak sesuai','error');return;}
-      var headerRow=rows[0];
-      // Deteksi kolom: NIS di col 0, Nama di col 1, nilai mulai col 2
-      var u4=isU4(selMapelGuru);
-      var flds=['s1','s2','s3','s4','s5','usMapel'].concat(u4?['us4Mapel']:[]).concat(['praktik']);
-      var hlbls=['S1','S2','S3','S4','S5','US Mapel'].concat(u4?['US 4 Mapel']:[]).concat(['Praktik']);
-      // Map header kolom ke field
-      var colMap=[];
-      for(var ci=2;ci<headerRow.length;ci++){
-        var hdr=(headerRow[ci]||'').toString().trim();
-        var fi=hlbls.indexOf(hdr);
-        if(fi>=0) colMap.push({col:ci,field:flds[fi]});
-      }
-      if(!colMap.length){toast('Header kolom nilai tidak ditemukan. Pastikan menggunakan template yang benar.','error');return;}
-      var cntFill=0,cntSkip=0,cntNoMatch=0,cntRow=0;
-      var pending=[];
-      rows.slice(1).forEach(function(r){
-        var nisCell=(r[0]||'').toString().trim();
-        var namaCell=(r[1]||'').toString().trim();
-        if(!nisCell&&!namaCell) return; // baris kosong / keterangan
-        if(namaCell.indexOf('KETERANGAN')===0||namaCell.indexOf('Kolom')===0) return;
-        cntRow++;
-        // Cari siswa by NIS dulu, fallback by nama
-        var siswa=null;
-        if(nisCell) siswa=allSiswa.find(function(s){return(s.nis||'').toString().trim()===nisCell&&s.kelas===selKelasGuru;});
-        if(!siswa&&namaCell) siswa=allSiswa.find(function(s){return s.nama.trim().toLowerCase()===namaCell.toLowerCase()&&s.kelas===selKelasGuru;});
-        if(!siswa){cntNoMatch++;return;}
-        var k=siswa.id+'_'+selMapelGuru;
-        if(!allNilai[k]) allNilai[k]={};
-        colMap.forEach(function(cm){
-          var raw=r[cm.col];
-          var valStr=(raw===undefined||raw===null)?'':raw.toString().trim();
-          if(valStr==='') return; // kosong di Excel → skip
-          var num=parseFloat(valStr);
-          if(isNaN(num)) return;
-          // Hanya isi jika kolom nilai saat ini kosong / undefined
-          if(allNilai[k][cm.field]!==undefined&&allNilai[k][cm.field]!==null&&allNilai[k][cm.field]!==''){
-            cntSkip++;return;
-          }
-          allNilai[k][cm.field]=num;
-          pending.push({path:'/nilai/'+k+'/'+cm.field,val:num});
-          cntFill++;
-        });
-      });
-      // Simpan ke Firebase
-      pending.forEach(function(p){dbs(p.path,p.val);});
-      // Update tampilan
-      if(prog&&res){
-        prog.classList.add('on');
-        res.innerHTML='✅ Berhasil: <strong>'+cntFill+' nilai</strong> diisi &nbsp;|&nbsp; <span>'+cntSkip+' nilai dilewati (sudah ada)</span> &nbsp;|&nbsp; <span>'+cntNoMatch+' baris tidak cocok</span>';
-      }
-      toast(cntFill+' nilai diimport, '+cntSkip+' dilewati');
-      inp.value='';
-      rNTbl(); // refresh tabel
-    }catch(err){toast('Gagal baca file Excel: '+err.message,'error');console.error(err);}
-  };
-  reader.readAsBinaryString(file);
 }
 function setKG(k){selKelasGuru=k;rNilaiGuru();}
 function setMG(id){selMapelGuru=id;rNilaiGuru();}
@@ -1240,9 +1153,8 @@ function rSKL(sid){
   ct().innerHTML=
     '<div class="shdr nopr"><div class="stit">SKL — '+s.nama+'</div><div class="sact">'+
     '<button class="btn bot" onclick="go(\'nilai-kelulusan\')">← Kembali</button>'+
+    '<button class="btn bgo" onclick="go(\'pengaturan\')" style="display:flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 4.93 19.07M4.93 4.93A10 10 0 0 1 19.07 19.07"/></svg> Atur No. SK/SKL</button>'+
     '<button class="btn bgo" onclick="window.print()">'+iPrint+' Cetak PDF</button></div></div>'+
-    '<div class="skl-eb nopr"><label>Nomor SKL :</label><input id="inskl" value="'+nomorSKL+'" placeholder="421/SKL/MB/VI/2026/001" oninput="document.getElementById(\'spnskl\').textContent=this.value||\'...............................\'"/><button class="btn bgo bsm" onclick="svSKLno(\''+sid+'\')">Simpan</button></div>'+
-    '<div class="skl-eb nopr" style="background:var(--em-light);border-color:var(--em)"><label style="color:var(--em2)">Nomor SK :</label><input id="insk" value="'+nomorSK+'" placeholder="421/SK.68/MB/VI/2026" oninput="document.getElementById(\'spnsk\').textContent=this.value||\'..............................\'"/><button class="btn bpr bsm" onclick="svSKno()">Simpan</button></div>'+
     '<div class="skldoc">'+
     (peng.kop?'<div class="skl-kw"><img class="skl-ki" src="'+peng.kop+'" alt="Kop"/></div>':
     '<div class="skl-kf">'+
